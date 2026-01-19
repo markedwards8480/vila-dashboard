@@ -167,18 +167,22 @@ function requireAuth(req, res, next) {
   }
 }
 
-// Helper function to clean numbers from PDF (handles spaces like "1 24,206.05")
+// Helper function to clean numbers from PDF (handles spaces like "1 24,206.05" or "$ 1 24,206.05")
 function cleanNumber(str) {
   if (!str) return 0;
-  // Remove spaces within numbers, keep only digits, commas, dots, and minus
-  const cleaned = str.replace(/(\d)\s+(\d)/g, '$1$2').replace(/[^\d.,-]/g, '');
-  return parseFloat(cleaned.replace(/,/g, '')) || 0;
+  // Remove $ sign, then remove ALL spaces, then parse
+  const cleaned = str.replace(/\$/g, '').replace(/\s+/g, '').replace(/,/g, '');
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
 }
 
 // Parse monthly statement PDF - Amanyara specific format
 async function parseMonthlyStatement(buffer, filename) {
   const data = await pdfParse(buffer);
   const text = data.text;
+  
+  console.log('=== PARSING STATEMENT ===');
+  console.log('Filename:', filename);
   
   const result = {
     statementDate: null,
@@ -200,12 +204,8 @@ async function parseMonthlyStatement(buffer, filename) {
     rawText: text
   };
   
-  // Parse date from filename or content
-  // Look for patterns like "November 30th, 2025" or "November_Statement_2025"
-  const dateMatch = filename.match(/(\w+)[\s_-]+Statement[\s_-]+(\d{4})/i) ||
-                    text.match(/Statement of Account\s*(\w+)\s+\d+(?:st|nd|rd|th)?,?\s*(\d{4})/i) ||
-                    text.match(/(\w+)\s+\d+(?:st|nd|rd|th)?,?\s*(\d{4})/i);
-  
+  // Parse date from filename - format: Villa_08_-November_Statement_2025.pdf
+  const dateMatch = filename.match(/(\w+)[\s_-]*Statement[\s_-]*(\d{4})/i);
   if (dateMatch) {
     const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 
                         'july', 'august', 'september', 'october', 'november', 'december'];
@@ -214,99 +214,112 @@ async function parseMonthlyStatement(buffer, filename) {
       result.month = monthIdx + 1;
       result.year = parseInt(dateMatch[2]);
       result.statementDate = new Date(result.year, result.month - 1, 1);
+      console.log('Parsed date:', result.month, result.year);
     }
   }
   
-  // Parse closing balance - look for the last balance on page 1
-  // Format in PDF: "$ 1 24,206.05" at end of November statement line
-  const balanceMatches = text.match(/\$\s*([\d\s,]+\.[\d]{2})/g);
-  if (balanceMatches && balanceMatches.length > 0) {
-    // Get the last balance which should be the closing balance
-    const lastBalance = balanceMatches[balanceMatches.length - 1];
-    result.closingBalance = cleanNumber(lastBalance);
+  // Parse closing balance - look for "November 2025 Statement S11 4 0,366.98 $ 1 24,206.05"
+  // The last $ amount on that line is the closing balance
+  const novStatementMatch = text.match(/November 2025 Statement.*?\$\s*([\d\s,\.]+)/g);
+  if (novStatementMatch && novStatementMatch.length > 0) {
+    const lastMatch = novStatementMatch[novStatementMatch.length - 1];
+    const balanceMatch = lastMatch.match(/\$\s*([\d\s,\.]+)/);
+    if (balanceMatch) {
+      result.closingBalance = cleanNumber(balanceMatch[1]);
+      console.log('Closing balance:', result.closingBalance);
+    }
   }
   
-  // More specific: look for the November 2025 Statement line balance
-  const novBalanceMatch = text.match(/November 2025 Statement.*?\$\s*([\d\s,]+\.[\d]{2})/i);
-  if (novBalanceMatch) {
-    result.closingBalance = cleanNumber(novBalanceMatch[1]);
+  // Alternative: Look for the final balance line "$ 5 4,361.09 528,267.65 458,422.69 $ 1 24,206.05"
+  if (!result.closingBalance || result.closingBalance < 1000) {
+    const finalLineMatch = text.match(/\$\s*[\d\s,\.]+\s+[\d,\.]+\s+[\d,\.]+\s+\$\s*([\d\s,\.]+)/);
+    if (finalLineMatch) {
+      result.closingBalance = cleanNumber(finalLineMatch[1]);
+      console.log('Closing balance (from final line):', result.closingBalance);
+    }
   }
   
-  // Parse occupancy - format: "Villa Owner Usage 4 19" (first is current month, second is YTD)
+  // Parse occupancy - format: "Villa Owner Usage 4 19" where first number is current month
   const ownerMatch = text.match(/Villa Owner Usage\s+(\d+)\s+(\d+)/i);
   const guestMatch = text.match(/Villa Owner Guest Usage\s+(\d+)\s+(\d+)/i);
   const rentalMatch = text.match(/Villa Rental\s+(\d+)\s+(\d+)/i);
   const vacantMatch = text.match(/Vacant\s+(\d+)\s+(\d+)/i);
   
   if (ownerMatch) {
-    result.occupancy.ownerNights = parseInt(ownerMatch[1]); // Current month
-    result.occupancy.ownerNightsYTD = parseInt(ownerMatch[2]); // YTD
+    result.occupancy.ownerNights = parseInt(ownerMatch[1]);
+    console.log('Owner nights:', result.occupancy.ownerNights);
   }
   if (guestMatch) {
     result.occupancy.guestNights = parseInt(guestMatch[1]);
-    result.occupancy.guestNightsYTD = parseInt(guestMatch[2]);
+    console.log('Guest nights:', result.occupancy.guestNights);
   }
   if (rentalMatch) {
     result.occupancy.rentalNights = parseInt(rentalMatch[1]);
-    result.occupancy.rentalNightsYTD = parseInt(rentalMatch[2]);
+    console.log('Rental nights:', result.occupancy.rentalNights);
   }
   if (vacantMatch) {
     result.occupancy.vacantNights = parseInt(vacantMatch[1]);
-    result.occupancy.vacantNightsYTD = parseInt(vacantMatch[2]);
+    console.log('Vacant nights:', result.occupancy.vacantNights);
   }
   
-  // Parse expenses - Amanyara format has spaces in numbers
-  // Format: "Payroll & related Expenses* 9 ,691.96 8 0,205.66"
+  // Parse 50% Owner Revenue - format: "50% OWNER REVENUE - 2 05,349.98"
+  const revenueMatch = text.match(/50% OWNER REVENUE[^\d]+([\d\s,\.]+)/i);
+  if (revenueMatch) {
+    result.ownerRevenueShare = cleanNumber(revenueMatch[1]);
+    console.log('Owner revenue share:', result.ownerRevenueShare);
+  }
+  
+  // Parse Total Expenses - format: "TOTAL EXPENSES 4 0,366.98"
+  const totalExpMatch = text.match(/TOTAL EXPENSES\s+([\d\s,\.]+)/i);
+  if (totalExpMatch) {
+    result.totalExpenses = cleanNumber(totalExpMatch[1]);
+    console.log('Total expenses:', result.totalExpenses);
+  }
+  
+  // Parse individual expenses - look for category followed by numbers
+  // Format: "Contract Services 6 ,100.00 4 5,939.50" - first number is current month
   const expensePatterns = [
-    { pattern: /Payroll & related Expenses\*?\s+([\d\s,]+\.[\d]{2})/gi, category: 'Payroll', subcategory: 'Villa Staff' },
-    { pattern: /Guest amenities\s+([\d\s,]+\.[\d]{2})/gi, category: 'General Services', subcategory: 'Guest Amenities' },
-    { pattern: /Cleaning supplies\s+([\d\s,]+\.[\d]{2})/gi, category: 'General Services', subcategory: 'Cleaning Supplies' },
-    { pattern: /Laundry\s+([\d\s,]+\.[\d]{2})/gi, category: 'General Services', subcategory: 'Laundry' },
-    { pattern: /Other operating supplies\s+([\d\s,]+\.[\d]{2})/gi, category: 'General Services', subcategory: 'Operating Supplies' },
-    { pattern: /Telephone.*?Cable TV.*?Internet\s+([\d\s,]+\.[\d]{2})/gi, category: 'General Services', subcategory: 'Telecom' },
-    { pattern: /Liability Insurance\s+-?\s*([\d\s,]+\.[\d]{2})/gi, category: 'Insurance', subcategory: 'Liability' },
-    { pattern: /Contract Services\s+([\d\s,]+\.[\d]{2})/gi, category: 'Maintenance', subcategory: 'Contract Services' },
-    { pattern: /Pest Control.*?Waste Removal\s+([\d\s,]+\.[\d]{2})/gi, category: 'Maintenance', subcategory: 'Pest & Waste' },
-    { pattern: /Security Program\s+([\d\s,]+\.[\d]{2})/gi, category: 'Security', subcategory: 'Security Program' },
-    { pattern: /Landscaping Program\s+([\d\s,]+\.[\d]{2})/gi, category: 'Maintenance', subcategory: 'Landscaping' },
-    { pattern: /Maintenance Program\s+([\d\s,]+\.[\d]{2})/gi, category: 'Maintenance', subcategory: 'Maintenance Program' },
-    { pattern: /Maintenance Materials\s+([\d\s,]+\.[\d]{2})/gi, category: 'Maintenance', subcategory: 'Materials' },
-    { pattern: /15% Administration Fee\s+([\d\s,]+\.[\d]{2})/gi, category: 'Admin', subcategory: 'Admin Fee (15%)' },
-    { pattern: /Electricity\s+([\d\s,]+\.[\d]{2})/gi, category: 'Utilities', subcategory: 'Electricity' },
-    { pattern: /Water\s+([\d\s,]+\.[\d]{2})/gi, category: 'Utilities', subcategory: 'Water' }
+    { regex: /Contract Services\s+([\d\s,\.]+)/i, category: 'Maintenance', subcategory: 'Contract Services' },
+    { regex: /Electricity\s+([\d\s,\.]+)/i, category: 'Utilities', subcategory: 'Electricity' },
+    { regex: /Water\s+([\d\s,\.]+)/i, category: 'Utilities', subcategory: 'Water' },
+    { regex: /Cleaning supplies\s+([\d\s,\.]+)/i, category: 'General Services', subcategory: 'Cleaning Supplies' },
+    { regex: /Laundry\s+([\d\s,\.]+)/i, category: 'General Services', subcategory: 'Laundry' },
+    { regex: /Guest amenities\s+([\d\s,\.]+)/i, category: 'General Services', subcategory: 'Guest Amenities' },
+    { regex: /Telephone.*?Internet\s+([\d\s,\.]+)/i, category: 'General Services', subcategory: 'Telecom' },
+    { regex: /Security Program\s+([\d\s,\.]+)/i, category: 'Security', subcategory: 'Security Program' },
+    { regex: /15% Administration Fee\s+([\d\s,\.]+)/i, category: 'Admin', subcategory: 'Admin Fee (15%)' },
+    { regex: /Pest Control.*?Waste Removal\s+([\d\s,\.]+)/i, category: 'Maintenance', subcategory: 'Pest & Waste' },
+    { regex: /Maintenance Materials\s+([\d\s,\.]+)/i, category: 'Maintenance', subcategory: 'Materials' },
+    { regex: /Landscaping Program\s+([\d\s,\.]+)/i, category: 'Maintenance', subcategory: 'Landscaping Program' },
+    { regex: /Maintenance Program\s+([\d\s,\.]+)/i, category: 'Maintenance', subcategory: 'Maintenance Program' },
   ];
   
-  for (const { pattern, category, subcategory } of expensePatterns) {
-    let match;
-    pattern.lastIndex = 0; // Reset regex
-    while ((match = pattern.exec(text)) !== null) {
+  for (const { regex, category, subcategory } of expensePatterns) {
+    const match = text.match(regex);
+    if (match) {
       const amount = cleanNumber(match[1]);
       if (amount > 0) {
         result.expenses.push({ category, subcategory, amount });
+        console.log('Expense:', subcategory, amount);
       }
     }
   }
   
-  // Parse TOTAL EXPENSES - format: "TOTAL EXPENSES 4 0,366.98 4 37,644.07"
-  const totalExpMatch = text.match(/TOTAL EXPENSES\s+([\d\s,]+\.[\d]{2})/i);
-  if (totalExpMatch) {
-    result.totalExpenses = cleanNumber(totalExpMatch[1]);
-  }
-  
-  // Parse utilities
-  const electricityKWH = text.match(/Total KWH\s+([\d\s,]+)/i);
-  const electricityCost = text.match(/Total Energy Cost\s+([\d\s,]+\.[\d]{2})/i);
-  if (electricityKWH) {
+  // Parse utilities from page with "Total KWH" and "Total Energy Cost"
+  const kwhMatch = text.match(/Total KWH\s+([\d\s,\.]+)/i);
+  const energyCostMatch = text.match(/Total Energy Cost\s+([\d\s,\.]+)/i);
+  if (kwhMatch && energyCostMatch) {
     result.utilities.push({
       type: 'Electricity',
-      consumption: cleanNumber(electricityKWH[1]),
-      cost: electricityCost ? cleanNumber(electricityCost[1]) : 0,
+      consumption: cleanNumber(kwhMatch[1]),
+      cost: cleanNumber(energyCostMatch[1]),
       unit: 'KWH'
     });
+    console.log('Electricity:', cleanNumber(kwhMatch[1]), 'KWH, $', cleanNumber(energyCostMatch[1]));
   }
   
-  const waterGallons = text.match(/Villa Consumption\s+([\d\s,]+)/i);
-  const waterCost = text.match(/Total Water Consumption\s+\$?\s*([\d\s,]+\.[\d]{2})/i);
+  const waterGallons = text.match(/Villa Consumption\s+([\d\s,\.]+)/i);
+  const waterCost = text.match(/Total Water Consumption\s+\$?\s*([\d\s,\.]+)/i);
   if (waterGallons) {
     result.utilities.push({
       type: 'Water',
@@ -314,22 +327,11 @@ async function parseMonthlyStatement(buffer, filename) {
       cost: waterCost ? cleanNumber(waterCost[1]) : 0,
       unit: 'Gallons'
     });
+    console.log('Water:', cleanNumber(waterGallons[1]), 'Gallons');
   }
   
-  // Parse rental revenue - 50% OWNER REVENUE
-  // Format: "50% OWNER REVENUE - 2 05,349.98 2 05,349.98"
-  const revenueMatch = text.match(/50% OWNER REVENUE\s+-?\s*([\d\s,]+\.[\d]{2})/i);
-  if (revenueMatch) {
-    result.ownerRevenueShare = cleanNumber(revenueMatch[1]);
-  }
-  
-  // Gross Villa Revenue
-  const grossMatch = text.match(/Gross Villa Revenue\s+-?\s*([\d\s,]+\.[\d]{2})/i);
-  if (grossMatch) {
-    result.rentalRevenue = cleanNumber(grossMatch[1]);
-  }
-  
-  console.log('Parsed statement:', {
+  console.log('=== PARSING COMPLETE ===');
+  console.log('Result summary:', {
     date: result.statementDate,
     balance: result.closingBalance,
     occupancy: result.occupancy,
