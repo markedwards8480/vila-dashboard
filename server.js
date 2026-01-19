@@ -409,7 +409,7 @@ function getHTML() {
           <button class="upload-type-btn" data-type="folio">Hotel Folio</button>
         </div>
       </div>
-      <input type="file" id="fileInput" accept=".pdf">
+      <input type="file" id="fileInput" accept=".pdf" multiple>
       <div class="kpi-grid">
         <div class="kpi-card"><div class="kpi-label">Account Balance</div><div class="kpi-value" id="kpiBalance">--</div></div>
         <div class="kpi-card"><div class="kpi-label">Total Nights</div><div class="kpi-value" id="kpiNights">--</div><div class="kpi-sub" id="kpiNightsSub"></div></div>
@@ -509,18 +509,27 @@ function getHTML() {
     });
     uploadZone.addEventListener('click', () => fileInput.click());
     uploadZone.addEventListener('dragover', e => { e.preventDefault(); });
-    uploadZone.addEventListener('drop', e => { e.preventDefault(); if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]); });
-    fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
-    async function handleFile(file) {
-      if (!file.name.toLowerCase().endsWith('.pdf')) { alert('Please upload a PDF'); return; }
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('fileType', selectedFileType);
-      try {
-        const res = await fetch('/api/upload', { method: 'POST', body: formData });
-        const data = await res.json();
-        if (data.success) { loadDashboard(); } else { alert(data.error); }
-      } catch (err) { alert('Upload failed'); }
+    uploadZone.addEventListener('drop', e => { e.preventDefault(); if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files); });
+    fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFiles(fileInput.files); });
+    async function handleFiles(files) {
+      const pdfFiles = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+      if (pdfFiles.length === 0) { alert('Please upload PDF files'); return; }
+      uploadZone.innerHTML = '<div class="upload-icon">⏳</div><div class="upload-text">Processing ' + pdfFiles.length + ' file(s)...</div>';
+      let successCount = 0;
+      let errorCount = 0;
+      for (const file of pdfFiles) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('fileType', selectedFileType);
+        try {
+          const res = await fetch('/api/upload', { method: 'POST', body: formData });
+          const data = await res.json();
+          if (data.success) { successCount++; } else { errorCount++; }
+        } catch (err) { errorCount++; }
+      }
+      uploadZone.innerHTML = '<div class="upload-icon">✅</div><div class="upload-text">' + successCount + ' file(s) uploaded' + (errorCount > 0 ? ', ' + errorCount + ' failed' : '') + '</div><div class="upload-types"><button class="upload-type-btn active" data-type="statement">Monthly Statement</button><button class="upload-type-btn" data-type="folio">Hotel Folio</button></div>';
+      document.querySelectorAll('.upload-type-btn').forEach(btn => { btn.addEventListener('click', () => { document.querySelectorAll('.upload-type-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); selectedFileType = btn.dataset.type; }); });
+      loadDashboard();
     }
     document.getElementById('chatToggle').addEventListener('click', () => document.getElementById('chatPanel').classList.toggle('active'));
     document.getElementById('chatInput').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } });
