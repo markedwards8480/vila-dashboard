@@ -28,4 +28,4 @@ Set these in Railway:
 3. Set environment variables
 4. Deploy!
 
-Default login: admin / villa2025
+Default login: admin / villa2025 
