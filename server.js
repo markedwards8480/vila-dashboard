@@ -6,7 +6,7 @@ const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
 const pdfParse = require('pdf-parse');
 const path = require('path');
-const Anthropic = require('anthropic').default;
+const Anthropic = require('@anthropic-ai/sdk').default;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
