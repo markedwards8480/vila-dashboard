@@ -317,8 +317,14 @@ const dashboardHTML = `<!DOCTYPE html>
       </div>
     </div>
     <div class="view-controls">
-      <span class="view-label">View Month:</span>
-      <select id="monthSelect" onchange="updateView()">
+      <span class="view-label">View:</span>
+      <select id="viewMode" onchange="updateView()">
+        <option value="ytd" selected>Year to Date (YTD)</option>
+        <option value="t12">Trailing 12 Months</option>
+        <option value="month">Single Month</option>
+      </select>
+      <span class="view-label" id="monthLabel" style="margin-left:15px;display:none">Month:</span>
+      <select id="monthSelect" onchange="updateView()" style="display:none">
         <option value="12">December</option><option value="11">November</option><option value="10">October</option>
         <option value="9">September</option><option value="8">August</option><option value="7">July</option>
         <option value="6">June</option><option value="5">May</option><option value="4">April</option>
@@ -327,10 +333,10 @@ const dashboardHTML = `<!DOCTYPE html>
     </div>
     <div class="kpi-grid">
       <div class="kpi-card"><div class="label">Current Balance</div><div class="value" id="kpiBalance">$0</div><div class="subtext" id="kpiBalanceDate">-</div></div>
-      <div class="kpi-card"><div class="label" id="expLabel">Month Expenses</div><div class="value" id="kpiExpenses">$0</div><div class="subtext" id="kpiExpYTD">YTD: $0</div></div>
-      <div class="kpi-card highlight"><div class="label">Owner Revenue</div><div class="value" id="kpiRevenue">$0</div><div class="subtext">YTD (50% of net)</div></div>
-      <div class="kpi-card adr"><div class="label">Avg Daily Rate</div><div class="value" id="kpiADR">$0</div><div class="subtext" id="kpiADRytd">YTD: $0</div></div>
-      <div class="kpi-card"><div class="label">Occupancy</div><div class="value" id="kpiOccupancy">0%</div><div class="subtext" id="kpiOccSub">-</div></div>
+      <div class="kpi-card"><div class="label" id="expLabel">Expenses (YTD)</div><div class="value" id="kpiExpenses">$0</div><div class="subtext" id="kpiExpSub"></div></div>
+      <div class="kpi-card highlight"><div class="label" id="revLabel">Owner Revenue (YTD)</div><div class="value" id="kpiRevenue">$0</div><div class="subtext">50% of net rental</div></div>
+      <div class="kpi-card adr"><div class="label" id="adrLabel">Avg Daily Rate (YTD)</div><div class="value" id="kpiADR">$0</div><div class="subtext" id="kpiADRsub"></div></div>
+      <div class="kpi-card"><div class="label" id="occLabel">Occupancy (YTD)</div><div class="value" id="kpiOccupancy">0%</div><div class="subtext" id="kpiOccSub">-</div></div>
     </div>
     <h3 class="section-title">Occupancy Breakdown</h3>
     <div class="occupancy-grid">
@@ -350,16 +356,16 @@ const dashboardHTML = `<!DOCTYPE html>
       <div class="chart-card"><h3>Occupancy by Month</h3><canvas id="occChart"></canvas></div>
     </div>
     <div class="expense-section">
-      <h3>Expense Breakdown <span style="font-size:12px;color:rgba(255,255,255,0.5);font-weight:normal">(Month vs YTD)</span></h3>
+      <h3>Expense Breakdown</h3>
       <table class="expense-table" id="expTable">
-        <thead><tr><th>Category / Item</th><th class="month-col">Month</th><th class="ytd-col">YTD</th><th class="avg-col">Avg/Mo</th></tr></thead>
+        <thead><tr><th>Category / Item</th><th class="month-col" id="expColHeader">Selected</th><th class="ytd-col">YTD</th><th class="avg-col">Avg/Mo</th></tr></thead>
         <tbody id="expTableBody"></tbody>
       </table>
     </div>
     <div class="statements-list"><h3 class="section-title">Uploaded Statements</h3><div id="stmtList"></div></div>
   </div>
   <script>
-    let statements=[],expChart=null,occChart=null,selMonth=12;
+    let statements=[],expChart=null,occChart=null,viewMode='ytd',selMonth=12;
     async function checkAuth(){try{const r=await fetch('/api/auth/status');const d=await r.json();if(d.authenticated){show();load();}}catch(e){}}
     document.getElementById('loginForm').onsubmit=async e=>{e.preventDefault();try{const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:document.getElementById('username').value,password:document.getElementById('password').value})});const d=await r.json();if(d.success){show();load();}else document.getElementById('loginError').textContent=d.error;}catch(e){document.getElementById('loginError').textContent='Failed';}};
     async function logout(){await fetch('/api/logout',{method:'POST'});document.getElementById('loginScreen').style.display='flex';document.getElementById('dashboard').style.display='none';}
@@ -367,30 +373,75 @@ const dashboardHTML = `<!DOCTYPE html>
     async function load(){try{statements=await(await fetch('/api/statements')).json();render();}catch(e){}}
     document.getElementById('fileInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;const fd=new FormData();fd.append('file',f);try{const r=await fetch('/api/upload',{method:'POST',body:fd});const d=await r.json();if(d.success){alert('Uploaded!');load();}else alert('Error: '+d.error);}catch(e){alert('Error: '+e.message);}e.target.value='';};
     async function del(id){if(!confirm('Delete?'))return;await fetch('/api/statements/'+id,{method:'DELETE'});load();}
-    function updateView(){selMonth=parseInt(document.getElementById('monthSelect').value);render();}
+    function updateView(){
+      viewMode=document.getElementById('viewMode').value;
+      selMonth=parseInt(document.getElementById('monthSelect').value);
+      const showMonth=viewMode==='month';
+      document.getElementById('monthSelect').style.display=showMonth?'inline-block':'none';
+      document.getElementById('monthLabel').style.display=showMonth?'inline':'none';
+      render();
+    }
     
     function render(){
       if(!statements.length){document.getElementById('expTableBody').innerHTML='<tr><td colspan="4" class="empty-state">No data</td></tr>';document.getElementById('stmtList').innerHTML='<div class="empty-state">No statements</div>';return;}
       statements.sort((a,b)=>a.year!==b.year?b.year-a.year:b.month-a.month);
       const s=statements[0],mn=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],fmn=['January','February','March','April','May','June','July','August','September','October','November','December'];
       const occ=s.occupancy||{},md=s.monthly_data||{},exp=s.expenses||{};
+      const mo=md.occupancy||{},me=md.expenses||{},rev=md.revenue||{};
       
-      // Get month data
-      const mo=md.occupancy||{};
-      const od=mo[selMonth]||occ.current||{};
-      const me=md.expenses||{};
-      const monthExp=me[selMonth]?.total||(selMonth===s.month?s.total_expenses:0);
-      const rev=md.revenue||{};
-      const monthADR=rev[selMonth]?.adr||md.adr||0;
+      // Calculate values based on view mode
+      let od,expVal,adrVal,viewLabel,monthsCount;
       
+      if(viewMode==='ytd'){
+        // YTD view - use YTD totals
+        od=occ.ytd||occ.current||{};
+        expVal=exp.totalYTD||s.total_expenses;
+        adrVal=md.adrYTD||0;
+        viewLabel='YTD '+s.year;
+        monthsCount=s.month; // Number of months in YTD
+      } else if(viewMode==='t12'){
+        // Trailing 12 months - sum all months
+        od={ownerNights:0,guestNights:0,complimentaryNights:0,rentalNights:0,vacantNights:0,oooNights:0};
+        expVal=0;
+        let totalRevenue=0,rentalNights=0;
+        for(let m=1;m<=12;m++){
+          const mOcc=mo[m]||{};
+          od.ownerNights+=(mOcc.ownerNights||0);
+          od.guestNights+=(mOcc.guestNights||0);
+          od.complimentaryNights+=(mOcc.complimentaryNights||0);
+          od.rentalNights+=(mOcc.rentalNights||0);
+          od.vacantNights+=(mOcc.vacantNights||0);
+          od.oooNights+=(mOcc.oooNights||0);
+          expVal+=(me[m]?.total||0);
+          totalRevenue+=(rev[m]?.grossRevenue||0);
+          rentalNights+=(mOcc.rentalNights||0);
+        }
+        adrVal=rentalNights>0?(totalRevenue/rentalNights):0;
+        viewLabel='Trailing 12 Mo';
+        monthsCount=12;
+      } else {
+        // Single month view
+        od=mo[selMonth]||occ.current||{};
+        expVal=me[selMonth]?.total||(selMonth===s.month?s.total_expenses:0);
+        adrVal=rev[selMonth]?.adr||md.adr||0;
+        viewLabel=fmn[selMonth-1];
+        monthsCount=1;
+      }
+      
+      // Update KPI labels
+      document.getElementById('expLabel').textContent='Expenses ('+viewLabel+')';
+      document.getElementById('revLabel').textContent='Owner Revenue (YTD)';
+      document.getElementById('adrLabel').textContent='ADR ('+viewLabel+')';
+      document.getElementById('occLabel').textContent='Occupancy ('+viewLabel+')';
+      
+      // Update KPI values
       document.getElementById('kpiBalance').textContent=fmt(s.closing_balance);
       document.getElementById('kpiBalanceDate').textContent=mn[s.month-1]+' '+s.year;
-      document.getElementById('expLabel').textContent=fmn[selMonth-1]+' Expenses';
-      document.getElementById('kpiExpenses').textContent=fmt(monthExp);
-      document.getElementById('kpiExpYTD').textContent='YTD: '+fmt(exp.totalYTD||s.total_expenses);
+      document.getElementById('kpiExpenses').textContent=fmt(expVal);
+      document.getElementById('kpiExpSub').textContent=viewMode==='month'?'YTD: '+fmt(exp.totalYTD||s.total_expenses):'';
       document.getElementById('kpiRevenue').textContent=fmt(s.owner_revenue_share);
-      document.getElementById('kpiADR').textContent=fmt(monthADR);
-      document.getElementById('kpiADRytd').textContent='YTD Avg: '+fmt(md.adrYTD||0);
+      document.getElementById('kpiADR').textContent=fmt(adrVal);
+      document.getElementById('kpiADRsub').textContent=viewMode==='month'?'YTD: '+fmt(md.adrYTD||0):'';
       
       const tn=(od.ownerNights||0)+(od.guestNights||0)+(od.complimentaryNights||0)+(od.rentalNights||0)+(od.vacantNights||0)+(od.oooNights||0);
       const on=(od.ownerNights||0)+(od.guestNights||0)+(od.complimentaryNights||0)+(od.rentalNights||0);
@@ -403,35 +454,61 @@ const dashboardHTML = `<!DOCTYPE html>
       document.getElementById('occVacant').textContent=od.vacantNights||0;
       document.getElementById('occOOO').textContent=od.oooNights||0;
       
-      renderExpTable(exp,me,selMonth);
+      renderExpTable(exp,me,viewMode,selMonth);
+      document.getElementById('expColHeader').textContent=viewLabel;
       renderAnomalies(exp,me);
       renderStmts();
       renderCharts(s,md);
     }
     
-    function renderExpTable(exp,me,month){
+    function renderExpTable(exp,me,vMode,month){
       const cats=exp.categories||{};
       const cn={generalServices:'General Services',maintenance:'Maintenance',sharedExpenses:'Shared Expenses',utilities:'Utilities'};
       let h='';
       
       for(const[k,d]of Object.entries(cats)){
         if(k==='adminFee')continue;
-        const catMonthTotal=d.items?.reduce((sum,i)=>{const mv=i.monthly?.[month]||0;return sum+mv;},0)||0;
+        
+        // Calculate category totals based on view mode
+        let catTotal=0;
+        if(vMode==='ytd'){
+          catTotal=d.ytd||0;
+        }else if(vMode==='t12'){
+          catTotal=d.items?.reduce((sum,i)=>{let t=0;for(let m=1;m<=12;m++)t+=(i.monthly?.[m]||0);return sum+t;},0)||0;
+        }else{
+          catTotal=d.items?.reduce((sum,i)=>(sum+(i.monthly?.[month]||0)),0)||0;
+        }
+        
         const avgPerMonth=d.ytd?(d.ytd/12).toFixed(2):0;
-        h+='<tr class="category-row"><td>'+cn[k]+'</td><td class="month-col">'+fmt(catMonthTotal)+'</td><td class="ytd-col">'+fmt(d.ytd)+'</td><td class="avg-col">'+fmt(avgPerMonth)+'</td></tr>';
+        h+='<tr class="category-row"><td>'+cn[k]+'</td><td class="month-col">'+fmt(catTotal)+'</td><td class="ytd-col">'+fmt(d.ytd)+'</td><td class="avg-col">'+fmt(avgPerMonth)+'</td></tr>';
+        
         if(d.items){
           for(const i of d.items){
-            const mv=i.monthly?.[month]||i.current||0;
+            let itemVal=0;
+            if(vMode==='ytd'){
+              itemVal=i.ytd||0;
+            }else if(vMode==='t12'){
+              for(let m=1;m<=12;m++)itemVal+=(i.monthly?.[m]||0);
+            }else{
+              itemVal=i.monthly?.[month]||0;
+            }
+            
             const avg=i.ytd?(i.ytd/12):0;
-            const isAnomaly=avg>0&&mv>(avg*1.5);
-            h+='<tr class="item-row'+(isAnomaly?' anomaly':'')+'"><td>'+i.name+(isAnomaly?'<span class="anomaly-badge">+'+Math.round((mv/avg-1)*100)+'%</span>':'')+'</td><td class="month-col">'+fmt(mv)+'</td><td class="ytd-col">'+fmt(i.ytd)+'</td><td class="avg-col">'+fmt(avg)+'</td></tr>';
+            const isAnomaly=vMode==='month'&&avg>0&&itemVal>(avg*1.5);
+            h+='<tr class="item-row'+(isAnomaly?' anomaly':'')+'"><td>'+i.name+(isAnomaly?'<span class="anomaly-badge">+'+Math.round((itemVal/avg-1)*100)+'%</span>':'')+'</td><td class="month-col">'+fmt(itemVal)+'</td><td class="ytd-col">'+fmt(i.ytd)+'</td><td class="avg-col">'+fmt(avg)+'</td></tr>';
           }
         }
       }
+      
       if(cats.adminFee){
-        const adminMonth=cats.adminFee.current||0;
+        let adminVal=0;
+        if(vMode==='ytd'||vMode==='t12'){
+          adminVal=cats.adminFee.ytd||0;
+        }else{
+          adminVal=cats.adminFee.current||0;
+        }
         const adminAvg=cats.adminFee.ytd?(cats.adminFee.ytd/12):0;
-        h+='<tr class="category-row"><td>15% Admin Fee</td><td class="month-col">'+fmt(adminMonth)+'</td><td class="ytd-col">'+fmt(cats.adminFee.ytd)+'</td><td class="avg-col">'+fmt(adminAvg)+'</td></tr>';
+        h+='<tr class="category-row"><td>15% Admin Fee</td><td class="month-col">'+fmt(adminVal)+'</td><td class="ytd-col">'+fmt(cats.adminFee.ytd)+'</td><td class="avg-col">'+fmt(adminAvg)+'</td></tr>';
       }
       document.getElementById('expTableBody').innerHTML=h||'<tr><td colspan="4">No expense data</td></tr>';
     }
