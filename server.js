@@ -28,7 +28,7 @@ async function initDB() {
       )
     `);
     
-    // Drop and recreate monthly_statements table with correct schema
+    // Create monthly_statements table if not exists
     await pool.query(`
       CREATE TABLE IF NOT EXISTS monthly_statements (
         id SERIAL PRIMARY KEY,
@@ -47,6 +47,40 @@ async function initDB() {
         UNIQUE(year, month)
       )
     `);
+    
+    // ============================================
+    // MIGRATION: Add any missing columns to existing tables
+    // This ensures the schema stays in sync even if the table
+    // was created by an older version of the code
+    // ============================================
+    const columnsToEnsure = [
+      { table: 'monthly_statements', column: 'filename', type: 'VARCHAR(255)' },
+      { table: 'monthly_statements', column: 'closing_balance', type: 'DECIMAL(12,2)' },
+      { table: 'monthly_statements', column: 'total_expenses', type: 'DECIMAL(12,2)' },
+      { table: 'monthly_statements', column: 'owner_revenue_share', type: 'DECIMAL(12,2)' },
+      { table: 'monthly_statements', column: 'rental_revenue', type: 'DECIMAL(12,2)' },
+      { table: 'monthly_statements', column: 'occupancy', type: 'JSONB' },
+      { table: 'monthly_statements', column: 'expenses', type: 'JSONB' },
+      { table: 'monthly_statements', column: 'utilities', type: 'JSONB' }
+    ];
+    
+    for (const { table, column, type } of columnsToEnsure) {
+      try {
+        // Check if column exists
+        const checkResult = await pool.query(`
+          SELECT column_name FROM information_schema.columns 
+          WHERE table_name = $1 AND column_name = $2
+        `, [table, column]);
+        
+        if (checkResult.rows.length === 0) {
+          // Column doesn't exist, add it
+          await pool.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+          console.log(`Added missing column: ${table}.${column}`);
+        }
+      } catch (colErr) {
+        console.error(`Error checking/adding column ${column}:`, colErr.message);
+      }
+    }
     
     // Create default user if not exists
     const userCheck = await pool.query('SELECT id FROM users WHERE username = $1', ['admin']);
@@ -284,13 +318,18 @@ function parseMonthlyStatement(buffer, filename) {
     }
   }
   
-  // Get closing balance from December Statement sheet
-  const decSheet = workbook.Sheets['December Statement'];
-  if (decSheet) {
-    const decData = XLSX.utils.sheet_to_json(decSheet, { header: 1 });
+  // Get closing balance from the month's Statement sheet
+  // Try to find the sheet dynamically based on month
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                      'July', 'August', 'September', 'October', 'November', 'December'];
+  const monthSheetName = result.month ? monthNames[result.month - 1] + ' Statement' : null;
+  const statementSheet = monthSheetName ? workbook.Sheets[monthSheetName] : null;
+  
+  if (statementSheet) {
+    const stmtData = XLSX.utils.sheet_to_json(statementSheet, { header: 1 });
     // Find the last row with a balance value
-    for (let i = decData.length - 1; i >= 0; i--) {
-      const row = decData[i];
+    for (let i = stmtData.length - 1; i >= 0; i--) {
+      const row = stmtData[i];
       if (row && row[6] && typeof row[6] === 'number' && row[6] !== 0) {
         result.closingBalance = row[6];
         console.log('Closing Balance:', result.closingBalance);
