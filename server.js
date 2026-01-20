@@ -4,7 +4,7 @@ const multer = require('multer');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
-const pdfParse = require('pdf-parse');
+const XLSX = require('xlsx');
 const path = require('path');
 
 const app = express();
@@ -28,10 +28,10 @@ async function initDB() {
       )
     `);
     
+    // Drop and recreate monthly_statements table with correct schema
     await pool.query(`
       CREATE TABLE IF NOT EXISTS monthly_statements (
         id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id),
         statement_date DATE NOT NULL,
         year INTEGER NOT NULL,
         month INTEGER NOT NULL,
@@ -43,9 +43,8 @@ async function initDB() {
         occupancy JSONB,
         expenses JSONB,
         utilities JSONB,
-        raw_text TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, year, month)
+        UNIQUE(year, month)
       )
     `);
     
@@ -95,39 +94,16 @@ function requireAuth(req, res, next) {
 }
 
 // ============================================
-// PDF PARSING - Amanyara Statement Format
+// EXCEL PARSING - Amanyara Statement Format
 // ============================================
 
-// Helper function to clean numbers from PDF (handles spaces like "1 24,206.05" or "$ 8 9,314.94")
-function cleanNumber(str) {
-  if (!str) return 0;
-  // Remove $ sign, then remove ALL spaces, then remove commas
-  let cleaned = str.replace(/\$/g, '').replace(/\s+/g, '').replace(/,/g, '');
-  // Handle negative numbers in parentheses like "(4,631.55)"
-  if (cleaned.startsWith('(') && cleaned.endsWith(')')) {
-    cleaned = '-' + cleaned.slice(1, -1);
-  }
-  const num = parseFloat(cleaned);
-  return isNaN(num) ? 0 : num;
-}
-
-// Extract first dollar amount after a pattern (for current month column)
-function extractFirstAmount(pattern, text) {
-  const regex = new RegExp(pattern + '.*?\\s+([\\d\\s,]+\\.\\d{2})', 'i');
-  const match = text.match(regex);
-  if (match) {
-    return cleanNumber(match[1]);
-  }
-  return 0;
-}
-
-// Parse monthly statement PDF - Amanyara specific format
-async function parseMonthlyStatement(buffer, filename) {
-  const data = await pdfParse(buffer);
-  const text = data.text;
+// Parse monthly statement Excel file - Amanyara specific format
+function parseMonthlyStatement(buffer, filename) {
+  const workbook = XLSX.read(buffer, { type: 'buffer' });
   
-  console.log('=== PARSING STATEMENT ===');
+  console.log('=== PARSING EXCEL STATEMENT ===');
   console.log('Filename:', filename);
+  console.log('Sheets:', workbook.SheetNames);
   
   const result = {
     statementDate: null,
@@ -145,12 +121,11 @@ async function parseMonthlyStatement(buffer, filename) {
     utilities: [],
     rentalRevenue: 0,
     ownerRevenueShare: 0,
-    totalExpenses: 0,
-    rawText: text
+    totalExpenses: 0
   };
   
-  // Parse date from filename - format: Villa_08_-December_Statement_2025.pdf
-  const dateMatch = filename.match(/(\w+)[\s_-]*Statement[\s_-]*(\d{4})/i);
+  // Parse date from filename - format: Villa__08_December_2025_Statement.xlsx
+  const dateMatch = filename.match(/(\w+)[\s_]+(\d{4})[\s_]+Statement/i);
   if (dateMatch) {
     const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 
                         'july', 'august', 'september', 'october', 'november', 'december'];
@@ -163,129 +138,165 @@ async function parseMonthlyStatement(buffer, filename) {
     }
   }
   
-  // Determine month name for patterns
-  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
-                      'July', 'August', 'September', 'October', 'November', 'December'];
-  const currentMonthName = result.month ? monthNames[result.month - 1] : 'December';
-  
-  // Parse closing balance - look for "[Month] 2025 Statement S## [expense] $ [balance]"
-  // Example: "December 2025 Statement S12 4 1,160.93 $ 8 9,314.94"
-  const statementPattern = new RegExp(currentMonthName + '\\s+\\d{4}\\s+Statement\\s+S\\d+\\s+([\\d\\s,]+\\.\\d{2})\\s+\\$\\s*([\\d\\s,]+\\.\\d{2})', 'i');
-  const statementMatch = text.match(statementPattern);
-  if (statementMatch) {
-    result.totalExpenses = cleanNumber(statementMatch[1]);
-    result.closingBalance = cleanNumber(statementMatch[2]);
-    console.log('Statement line - Expenses:', result.totalExpenses, 'Balance:', result.closingBalance);
+  // Parse "Villa Owner Monthly Statement" sheet - this has all the key data
+  const mainSheet = workbook.Sheets['Villa Owner Monthly Statement'];
+  if (!mainSheet) {
+    console.log('WARNING: Villa Owner Monthly Statement sheet not found');
+    return result;
   }
   
-  // Fallback: Parse from TOTAL EXPENSES line if statement line didn't work
-  if (!result.totalExpenses) {
-    const totalExpMatch = text.match(/TOTAL EXPENSES\s+([\d\s,]+\.\d{2})/i);
-    if (totalExpMatch) {
-      result.totalExpenses = cleanNumber(totalExpMatch[1]);
-      console.log('Total expenses from TOTAL EXPENSES line:', result.totalExpenses);
-    }
-  }
+  const data = XLSX.utils.sheet_to_json(mainSheet, { header: 1 });
   
-  // Parse occupancy - "Villa Owner Usage 13 46" (first number is current month, second is YTD)
-  const ownerMatch = text.match(/Villa Owner Usage\s+(\d+)\s+(\d+)/i);
-  if (ownerMatch) {
-    result.occupancy.ownerNights = parseInt(ownerMatch[1]);
+  // Helper to safely get numeric value
+  const getNum = (val) => {
+    if (val === null || val === undefined || val === '') return 0;
+    const num = parseFloat(val);
+    return isNaN(num) ? 0 : num;
+  };
+  
+  // Helper to find row by label in column C (index 2) or A (index 0)
+  const findRow = (label) => {
+    return data.find(row => {
+      const col0 = String(row[0] || '').trim().toLowerCase();
+      const col2 = String(row[2] || '').trim().toLowerCase();
+      return col0.includes(label.toLowerCase()) || col2.includes(label.toLowerCase());
+    });
+  };
+  
+  // Parse occupancy (column 4 = December/current month, column 6 = YTD)
+  const ownerRow = findRow('villa owner usage');
+  if (ownerRow && !String(ownerRow[2]).toLowerCase().includes('guest')) {
+    result.occupancy.ownerNights = getNum(ownerRow[4]);
     console.log('Owner nights:', result.occupancy.ownerNights);
   }
   
-  const guestMatch = text.match(/Villa Owner Guest Usage\s+(\d+)\s+(\d+)/i);
-  if (guestMatch) {
-    result.occupancy.guestNights = parseInt(guestMatch[1]);
+  const guestRow = findRow('villa owner guest usage');
+  if (guestRow) {
+    result.occupancy.guestNights = getNum(guestRow[4]);
     console.log('Guest nights:', result.occupancy.guestNights);
   }
   
-  const rentalMatch = text.match(/Villa Rental\s+(\d+)\s+(\d+)/i);
-  if (rentalMatch) {
-    result.occupancy.rentalNights = parseInt(rentalMatch[1]);
+  const rentalRow = findRow('villa rental');
+  if (rentalRow) {
+    result.occupancy.rentalNights = getNum(rentalRow[4]);
     console.log('Rental nights:', result.occupancy.rentalNights);
   }
   
-  const vacantMatch = text.match(/Vacant\s+(\d+)\s+(\d+)/i);
-  if (vacantMatch) {
-    result.occupancy.vacantNights = parseInt(vacantMatch[1]);
+  const vacantRow = findRow('vacant');
+  if (vacantRow) {
+    result.occupancy.vacantNights = getNum(vacantRow[4]);
     console.log('Vacant nights:', result.occupancy.vacantNights);
   }
   
-  // Parse 50% Owner Revenue - first amount after pattern
-  const revenueMatch = text.match(/50% OWNER REVENUE\s+-?\s*([\d\s,]+\.\d{2})/i);
-  if (revenueMatch) {
-    result.ownerRevenueShare = cleanNumber(revenueMatch[1]);
-    console.log('Owner revenue share:', result.ownerRevenueShare);
+  // Parse revenue
+  const grossRevenueRow = findRow('gross villa revenue');
+  if (grossRevenueRow) {
+    result.rentalRevenue = getNum(grossRevenueRow[6]); // YTD
+    console.log('Gross Revenue YTD:', result.rentalRevenue);
   }
   
-  // Parse Gross Villa Revenue
-  const grossMatch = text.match(/Gross Villa Revenue\s+-?\s*([\d\s,]+\.\d{2})/i);
-  if (grossMatch) {
-    result.rentalRevenue = cleanNumber(grossMatch[1]);
-    console.log('Gross rental revenue:', result.rentalRevenue);
+  const ownerRevenueRow = findRow('50% owner revenue');
+  if (ownerRevenueRow) {
+    result.ownerRevenueShare = getNum(ownerRevenueRow[6]); // YTD
+    console.log('Owner Revenue Share YTD:', result.ownerRevenueShare);
   }
   
-  // Parse expense categories (first number after each label is current month)
+  // Parse total expenses
+  const totalExpRow = data.find(row => {
+    const col0 = String(row[0] || '').trim().toLowerCase();
+    return col0 === 'total expenses' || col0.includes('total expenses');
+  });
+  if (totalExpRow) {
+    result.totalExpenses = getNum(totalExpRow[4]); // December column
+    console.log('Total Expenses (Dec):', result.totalExpenses);
+  }
+  
+  // Parse individual expense categories
   const expensePatterns = [
-    { pattern: 'Payroll & related Expenses\\*', category: 'Payroll', subcategory: 'Staff Payroll' },
-    { pattern: 'Administrative & Shared Staff\\*', category: 'Payroll', subcategory: 'Admin Staff' },
-    { pattern: 'Guest amenities', category: 'General Services', subcategory: 'Guest Amenities' },
-    { pattern: 'Cleaning supplies', category: 'General Services', subcategory: 'Cleaning Supplies' },
-    { pattern: 'Laundry', category: 'General Services', subcategory: 'Laundry' },
-    { pattern: 'Other operating supplies', category: 'General Services', subcategory: 'Operating Supplies' },
-    { pattern: 'Telephone.*?Internet', category: 'General Services', subcategory: 'Telecom' },
-    { pattern: 'Printing and Stationary', category: 'General Services', subcategory: 'Printing' },
-    { pattern: 'Liability Insurance', category: 'Insurance', subcategory: 'Liability Insurance' },
-    { pattern: 'Materials - Maintenance', category: 'Maintenance', subcategory: 'Materials (Direct)' },
-    { pattern: 'Materials - Landscapting', category: 'Maintenance', subcategory: 'Landscaping Materials' },
-    { pattern: 'Contract Services', category: 'Maintenance', subcategory: 'Contract Services' },
-    { pattern: 'Fuel', category: 'Maintenance', subcategory: 'Fuel' },
-    { pattern: 'Maintenance Program \\(pyrl', category: 'Maintenance', subcategory: 'Maintenance Program' },
-    { pattern: 'Maintenance Materials', category: 'Maintenance', subcategory: 'Materials (Shared)' },
-    { pattern: 'Landscaping Program \\(pyrl', category: 'Maintenance', subcategory: 'Landscaping Program' },
-    { pattern: 'Pest Control.*?Waste Removal', category: 'Maintenance', subcategory: 'Pest & Waste' },
-    { pattern: 'Security Program', category: 'Security', subcategory: 'Security Program' },
-    { pattern: '15% Administration Fee', category: 'Admin', subcategory: 'Admin Fee (15%)' },
+    { pattern: 'payroll & related expenses*', category: 'Payroll', subcategory: 'Staff Payroll' },
+    { pattern: 'payroll & related expenses - admin', category: 'Payroll', subcategory: 'Admin Staff' },
+    { pattern: 'guest amenities', category: 'General Services', subcategory: 'Guest Amenities' },
+    { pattern: 'cleaning supplies', category: 'General Services', subcategory: 'Cleaning Supplies' },
+    { pattern: 'laundry', category: 'General Services', subcategory: 'Laundry' },
+    { pattern: 'other operating supplies', category: 'General Services', subcategory: 'Operating Supplies' },
+    { pattern: 'telephone', category: 'General Services', subcategory: 'Telecom' },
+    { pattern: 'printing', category: 'General Services', subcategory: 'Printing' },
+    { pattern: 'liability insurance', category: 'Insurance', subcategory: 'Liability Insurance' },
+    { pattern: 'materials - maintenance', category: 'Maintenance', subcategory: 'Materials (Direct)' },
+    { pattern: 'materials - landscap', category: 'Maintenance', subcategory: 'Landscaping Materials' },
+    { pattern: 'contract services', category: 'Maintenance', subcategory: 'Contract Services' },
+    { pattern: 'fuel', category: 'Maintenance', subcategory: 'Fuel' },
+    { pattern: 'maintenance program', category: 'Maintenance', subcategory: 'Maintenance Program' },
+    { pattern: 'maintenance materials', category: 'Maintenance', subcategory: 'Materials (Shared)' },
+    { pattern: 'landscaping program', category: 'Maintenance', subcategory: 'Landscaping Program' },
+    { pattern: 'pest control', category: 'Maintenance', subcategory: 'Pest & Waste' },
+    { pattern: 'security program', category: 'Security', subcategory: 'Security Program' },
+    { pattern: '15% administration fee', category: 'Admin', subcategory: 'Admin Fee (15%)' },
+    { pattern: 'electricity', category: 'Utilities', subcategory: 'Electricity' },
+    { pattern: 'water', category: 'Utilities', subcategory: 'Water' },
   ];
   
   for (const { pattern, category, subcategory } of expensePatterns) {
-    const amount = extractFirstAmount(pattern, text);
-    if (amount > 0) {
-      result.expenses.push({ category, subcategory, amount });
-      console.log('Expense:', subcategory, '-', amount);
+    for (const row of data) {
+      const col0 = String(row[0] || '').trim().toLowerCase();
+      const col2 = String(row[2] || '').trim().toLowerCase();
+      if (col0.includes(pattern) || col2.includes(pattern)) {
+        const amount = getNum(row[4]); // December column
+        if (amount > 0) {
+          result.expenses.push({ category, subcategory, amount });
+          console.log('Expense:', subcategory, '-', amount);
+        }
+        break; // Only take first match
+      }
     }
   }
   
-  // Parse utilities
-  const electricityAmount = extractFirstAmount('Electricity', text);
-  if (electricityAmount > 0) {
-    // Try to get KWH consumption
-    const kwhMatch = text.match(/Total KWH\s+([\d\s,]+)/i);
-    result.utilities.push({
-      type: 'Electricity',
-      consumption: kwhMatch ? cleanNumber(kwhMatch[1]) : 0,
-      cost: electricityAmount,
-      unit: 'KWH'
-    });
-    // Also add to expenses for totaling
-    result.expenses.push({ category: 'Utilities', subcategory: 'Electricity', amount: electricityAmount });
-    console.log('Electricity:', electricityAmount);
+  // Parse utilities from Utilities sheet if available
+  const utilSheet = workbook.Sheets['Utilities'];
+  if (utilSheet) {
+    const utilData = XLSX.utils.sheet_to_json(utilSheet, { header: 1 });
+    
+    // Find Total Energy Cost
+    const elecRow = utilData.find(row => String(row[0] || '').toLowerCase().includes('total energy cost'));
+    if (elecRow) {
+      const kwhRow = utilData.find(row => String(row[0] || '').toLowerCase() === 'total kwh');
+      result.utilities.push({
+        type: 'Electricity',
+        consumption: kwhRow ? getNum(kwhRow[1]) : 0,
+        cost: getNum(elecRow[2]),
+        unit: 'KWH'
+      });
+      console.log('Electricity:', getNum(elecRow[2]));
+    }
+    
+    // Find Water cost - look for "Total Water Consumption" or similar
+    for (const row of utilData) {
+      const label = String(row[0] || '').toLowerCase();
+      if (label.includes('villa consumption') || label.includes('water consumption')) {
+        result.utilities.push({
+          type: 'Water', 
+          consumption: getNum(row[1]),
+          cost: 0, // Cost is calculated in the main sheet
+          unit: 'Gallons'
+        });
+        break;
+      }
+    }
   }
   
-  const waterAmount = extractFirstAmount('Water', text);
-  if (waterAmount > 0) {
-    // Try to get gallons consumption
-    const gallonsMatch = text.match(/Villa Consumption\s+([\d\s,]+)/i);
-    result.utilities.push({
-      type: 'Water',
-      consumption: gallonsMatch ? cleanNumber(gallonsMatch[1]) : 0,
-      cost: waterAmount,
-      unit: 'Gallons'
-    });
-    // Also add to expenses for totaling
-    result.expenses.push({ category: 'Utilities', subcategory: 'Water', amount: waterAmount });
-    console.log('Water:', waterAmount);
+  // Get closing balance from December Statement sheet
+  const decSheet = workbook.Sheets['December Statement'];
+  if (decSheet) {
+    const decData = XLSX.utils.sheet_to_json(decSheet, { header: 1 });
+    // Find the last row with a balance value
+    for (let i = decData.length - 1; i >= 0; i--) {
+      const row = decData[i];
+      if (row && row[6] && typeof row[6] === 'number' && row[6] !== 0) {
+        result.closingBalance = row[6];
+        console.log('Closing Balance:', result.closingBalance);
+        break;
+      }
+    }
   }
   
   console.log('=== PARSING COMPLETE ===');
@@ -357,7 +368,7 @@ app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => 
     }
     
     console.log('Processing file:', req.file.originalname);
-    const parsed = await parseMonthlyStatement(req.file.buffer, req.file.originalname);
+    const parsed = parseMonthlyStatement(req.file.buffer, req.file.originalname);
     
     if (!parsed.month || !parsed.year) {
       return res.status(400).json({ error: 'Could not parse date from statement' });
@@ -366,10 +377,10 @@ app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => 
     // Upsert into database
     await pool.query(`
       INSERT INTO monthly_statements 
-        (user_id, statement_date, year, month, filename, closing_balance, total_expenses, 
-         owner_revenue_share, rental_revenue, occupancy, expenses, utilities, raw_text)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-      ON CONFLICT (user_id, year, month) 
+        (statement_date, year, month, filename, closing_balance, total_expenses, 
+         owner_revenue_share, rental_revenue, occupancy, expenses, utilities)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      ON CONFLICT (year, month) 
       DO UPDATE SET
         filename = EXCLUDED.filename,
         closing_balance = EXCLUDED.closing_balance,
@@ -378,10 +389,8 @@ app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => 
         rental_revenue = EXCLUDED.rental_revenue,
         occupancy = EXCLUDED.occupancy,
         expenses = EXCLUDED.expenses,
-        utilities = EXCLUDED.utilities,
-        raw_text = EXCLUDED.raw_text
+        utilities = EXCLUDED.utilities
     `, [
-      req.session.userId,
       parsed.statementDate,
       parsed.year,
       parsed.month,
@@ -392,8 +401,7 @@ app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => 
       parsed.rentalRevenue,
       JSON.stringify(parsed.occupancy),
       JSON.stringify(parsed.expenses),
-      JSON.stringify(parsed.utilities),
-      parsed.rawText
+      JSON.stringify(parsed.utilities)
     ]);
     
     res.json({ 
@@ -421,9 +429,8 @@ app.get('/api/statements', requireAuth, async (req, res) => {
       SELECT id, statement_date, year, month, filename, closing_balance, 
              total_expenses, owner_revenue_share, rental_revenue, occupancy, expenses, utilities
       FROM monthly_statements 
-      WHERE user_id = $1 
       ORDER BY year DESC, month DESC
-    `, [req.session.userId]);
+    `);
     
     res.json(result.rows);
   } catch (err) {
@@ -435,8 +442,7 @@ app.get('/api/statements', requireAuth, async (req, res) => {
 // Delete statement
 app.delete('/api/statements/:id', requireAuth, async (req, res) => {
   try {
-    await pool.query('DELETE FROM monthly_statements WHERE id = $1 AND user_id = $2', 
-      [req.params.id, req.session.userId]);
+    await pool.query('DELETE FROM monthly_statements WHERE id = $1', [req.params.id]);
     res.json({ success: true });
   } catch (err) {
     console.error('Delete error:', err);
@@ -804,7 +810,7 @@ const dashboardHTML = `
     <div class="header">
       <h1>🏝️ Villa 08 Dashboard</h1>
       <div class="header-actions">
-        <input type="file" id="fileInput" class="file-input" accept=".pdf">
+        <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls">
         <button class="upload-btn" onclick="document.getElementById('fileInput').click()">📄 Upload Statement</button>
         <button class="logout-btn" onclick="logout()">Logout</button>
       </div>
