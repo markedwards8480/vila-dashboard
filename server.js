@@ -23,7 +23,7 @@ async function initDB() {
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         username VARCHAR(255) UNIQUE NOT NULL,
-        password VARCHAR(255) NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -53,7 +53,7 @@ async function initDB() {
     const userCheck = await pool.query('SELECT id FROM users WHERE username = $1', ['admin']);
     if (userCheck.rows.length === 0) {
       const hashedPassword = await bcrypt.hash(process.env.ADMIN_PASSWORD || 'villa2025', 10);
-      await pool.query('INSERT INTO users (username, password) VALUES ($1, $2)', ['admin', hashedPassword]);
+      await pool.query('INSERT INTO users (username, password_hash) VALUES ($1, $2)', ['admin', hashedPassword]);
       console.log('Default admin user created');
     }
     
@@ -318,7 +318,7 @@ app.post('/api/login', async (req, res) => {
     }
     
     const user = result.rows[0];
-    const valid = await bcrypt.compare(password, user.password);
+    const valid = await bcrypt.compare(password, user.password_hash);
     
     if (!valid) {
       return res.status(401).json({ error: 'Invalid credentials' });
