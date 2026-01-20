@@ -62,6 +62,8 @@ function parseStatement(buffer, filename) {
     occupancyYTD: { ownerNights: 0, guestNights: 0, complimentaryNights: 0, rentalNights: 0, vacantNights: 0, oooNights: 0 },
     monthlyOccupancy: {}, monthlyExpenses: {}, monthlyRevenue: {},
     ownerRevenueShare: 0, ownerRevenueShareYTD: 0, grossRevenueYTD: 0,
+    grossRevenue: 0, netRevenue: 0, netRevenueYTD: 0,
+    adr: 0, adrYTD: 0,
     expenses: [], totalExpenses: 0, totalExpensesYTD: 0,
     expenseCategories: {
       generalServices: { current: 0, ytd: 0, items: [] },
@@ -85,8 +87,6 @@ function parseStatement(buffer, filename) {
   const ms = wb.Sheets['Villa Owner Monthly Statement'];
   if (ms) {
     const d = XLSX.utils.sheet_to_json(ms, { header: 1 });
-    // Occupancy rows: 4=Owner, 5=Guest, 6=Comp, 7=Rental, 8=Vacant, 9=OOO
-    // Columns: 4=current month, 6=YTD, 9-20=Jan-Dec
     const occRows = { 4: 'ownerNights', 5: 'guestNights', 6: 'complimentaryNights', 7: 'rentalNights', 8: 'vacantNights', 9: 'oooNights' };
     for (const [ri, fld] of Object.entries(occRows)) {
       const row = d[parseInt(ri)];
@@ -99,21 +99,13 @@ function parseStatement(buffer, filename) {
         }
       }
     }
-    console.log('Occupancy current:', r.occupancy);
-    console.log('Occupancy YTD:', r.occupancyYTD);
     
-    // Revenue: row 12=Gross, row 20=50% Owner
-    if (d[12]) { r.grossRevenueYTD = n(d[12][6]); }
-    if (d[20]) { 
-      r.ownerRevenueShare = n(d[20][4]); 
-      r.ownerRevenueShareYTD = n(d[20][6]); 
-      for (let m = 1; m <= 12; m++) { 
-        if (!r.monthlyRevenue[m]) r.monthlyRevenue[m] = {}; 
-        r.monthlyRevenue[m].ownerRevenueShare = n(d[20][8 + m]); 
-      } 
-    }
+    // ADR row 11, Gross Revenue row 12, Net Revenue row 18, 50% Owner row 20
+    if (d[11]) { r.adr = n(d[11][4]); r.adrYTD = n(d[11][6]); for (let m = 1; m <= 12; m++) { if (!r.monthlyRevenue[m]) r.monthlyRevenue[m] = {}; r.monthlyRevenue[m].adr = n(d[11][8 + m]); } }
+    if (d[12]) { r.grossRevenue = n(d[12][4]); r.grossRevenueYTD = n(d[12][6]); for (let m = 1; m <= 12; m++) { if (!r.monthlyRevenue[m]) r.monthlyRevenue[m] = {}; r.monthlyRevenue[m].grossRevenue = n(d[12][8 + m]); } }
+    if (d[18]) { r.netRevenue = n(d[18][4]); r.netRevenueYTD = n(d[18][6]); }
+    if (d[20]) { r.ownerRevenueShare = n(d[20][4]); r.ownerRevenueShareYTD = n(d[20][6]); for (let m = 1; m <= 12; m++) { if (!r.monthlyRevenue[m]) r.monthlyRevenue[m] = {}; r.monthlyRevenue[m].ownerRevenueShare = n(d[20][8 + m]); } }
     
-    // Expenses
     const em = [
       [24,'generalServices','Payroll & Related'],[25,'generalServices','Guest Amenities'],[26,'generalServices','Cleaning Supplies'],
       [27,'generalServices','Laundry'],[29,'generalServices','Other Operating'],[31,'generalServices','Telephone/Cable/Internet'],
@@ -127,23 +119,24 @@ function parseStatement(buffer, filename) {
       const row = d[ri];
       if (row) {
         const cur = n(row[4]), ytd = n(row[6]);
+        const monthlyVals = {};
+        for (let m = 1; m <= 12; m++) { monthlyVals[m] = n(row[8 + m]); }
+        
         if (cur || ytd) {
-          r.expenses.push({ category: cat, name: nm, current: cur, ytd });
+          r.expenses.push({ category: cat, name: nm, current: cur, ytd, monthly: monthlyVals });
           if (cat === 'adminFee') { r.expenseCategories.adminFee = { current: cur, ytd }; }
-          else { r.expenseCategories[cat].current += cur; r.expenseCategories[cat].ytd += ytd; r.expenseCategories[cat].items.push({ name: nm, current: cur, ytd }); }
+          else { r.expenseCategories[cat].current += cur; r.expenseCategories[cat].ytd += ytd; r.expenseCategories[cat].items.push({ name: nm, current: cur, ytd, monthly: monthlyVals }); }
         }
         for (let m = 1; m <= 12; m++) { 
           if (!r.monthlyExpenses[m]) r.monthlyExpenses[m] = { total: 0, items: [] }; 
-          const v = n(row[8 + m]); 
+          const v = monthlyVals[m]; 
           if (v) { r.monthlyExpenses[m].items.push({ category: cat, name: nm, amount: v }); r.monthlyExpenses[m].total += v; } 
         }
       }
     }
     if (d[67]) { r.totalExpenses = n(d[67][4]); r.totalExpensesYTD = n(d[67][6]); }
-    console.log('Total Expenses:', r.totalExpenses, 'YTD:', r.totalExpensesYTD);
   }
   
-  // Utilities tab
   const us = wb.Sheets['Utilities'];
   if (us) {
     const ud = XLSX.utils.sheet_to_json(us, { header: 1 });
@@ -154,7 +147,6 @@ function parseStatement(buffer, filename) {
     }
   }
   
-  // Closing balance from statement tab
   const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const ssn = r.month ? monthNames[r.month - 1] + ' Statement' : 'December Statement';
   const ss = wb.Sheets[ssn] || wb.Sheets['December Statement'];
@@ -169,11 +161,10 @@ function parseStatement(buffer, filename) {
   }
   
   console.log('=== PARSING COMPLETE ===');
-  console.log('Summary:', { month: r.month, year: r.year, balance: r.closingBalance, expenses: r.totalExpenses, expYTD: r.totalExpensesYTD, occ: r.occupancy });
+  console.log('Summary:', { month: r.month, year: r.year, balance: r.closingBalance, expenses: r.totalExpenses, adr: r.adr, adrYTD: r.adrYTD });
   return r;
 }
 
-// API Routes
 app.post('/api/login', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -188,10 +179,7 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.post('/api/logout', (req, res) => { req.session.destroy(); res.json({ success: true }); });
-
-app.get('/api/auth/status', (req, res) => { 
-  res.json(req.session && req.session.userId ? { authenticated: true, username: req.session.username } : { authenticated: false }); 
-});
+app.get('/api/auth/status', (req, res) => { res.json(req.session && req.session.userId ? { authenticated: true, username: req.session.username } : { authenticated: false }); });
 
 app.post('/api/upload', auth, upload.single('file'), async (req, res) => {
   try {
@@ -201,7 +189,7 @@ app.post('/api/upload', auth, upload.single('file'), async (req, res) => {
     
     const occupancyData = JSON.stringify({ current: p.occupancy, ytd: p.occupancyYTD });
     const expenseData = JSON.stringify({ items: p.expenses, categories: p.expenseCategories, totalCurrent: p.totalExpenses, totalYTD: p.totalExpensesYTD });
-    const monthlyData = JSON.stringify({ occupancy: p.monthlyOccupancy, expenses: p.monthlyExpenses, revenue: p.monthlyRevenue });
+    const monthlyData = JSON.stringify({ occupancy: p.monthlyOccupancy, expenses: p.monthlyExpenses, revenue: p.monthlyRevenue, adr: p.adr, adrYTD: p.adrYTD });
     const utilitiesData = JSON.stringify(p.utilities);
     
     await pool.query(
@@ -209,7 +197,7 @@ app.post('/api/upload', auth, upload.single('file'), async (req, res) => {
       [p.statementDate, p.year, p.month, req.file.originalname, p.closingBalance, p.totalExpenses, p.ownerRevenueShareYTD, p.grossRevenueYTD, occupancyData, expenseData, utilitiesData, monthlyData]
     );
     
-    res.json({ success: true, parsed: { month: p.month, year: p.year, closingBalance: p.closingBalance, totalExpenses: p.totalExpenses, totalExpensesYTD: p.totalExpensesYTD, occupancy: p.occupancy, occupancyYTD: p.occupancyYTD } });
+    res.json({ success: true, parsed: { month: p.month, year: p.year, closingBalance: p.closingBalance, totalExpenses: p.totalExpenses, adr: p.adr, adrYTD: p.adrYTD, occupancy: p.occupancy } });
   } catch (e) { console.error('Upload error:', e); res.status(500).json({ error: e.message }); }
 });
 
@@ -225,7 +213,6 @@ app.delete('/api/statements/:id', auth, async (req, res) => {
   catch (e) { res.status(500).json({ error: 'Delete failed' }); }
 });
 
-// Dashboard HTML
 const dashboardHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -255,16 +242,17 @@ const dashboardHTML = `<!DOCTYPE html>
     .view-controls select{padding:10px 15px;border-radius:10px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.1);color:#fff}
     .view-controls select option{background:#1a1a2e}
     .view-label{color:rgba(255,255,255,0.6);font-size:14px}
-    .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:15px;margin-bottom:30px}
-    .kpi-card{background:rgba(255,255,255,0.1);border-radius:15px;padding:20px;border:1px solid rgba(255,255,255,0.1)}
-    .kpi-card .label{color:rgba(255,255,255,0.6);font-size:13px;margin-bottom:8px}
-    .kpi-card .value{font-size:24px;font-weight:700;color:#4ecdc4}
-    .kpi-card .subtext{font-size:11px;color:rgba(255,255,255,0.5);margin-top:5px}
+    .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:15px;margin-bottom:30px}
+    .kpi-card{background:rgba(255,255,255,0.1);border-radius:15px;padding:18px;border:1px solid rgba(255,255,255,0.1)}
+    .kpi-card .label{color:rgba(255,255,255,0.6);font-size:12px;margin-bottom:6px}
+    .kpi-card .value{font-size:22px;font-weight:700;color:#4ecdc4}
+    .kpi-card .subtext{font-size:10px;color:rgba(255,255,255,0.5);margin-top:4px}
     .kpi-card.highlight .value{color:#f39c12}
-    .occupancy-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:30px}
-    .occupancy-card{background:rgba(255,255,255,0.08);border-radius:12px;padding:15px;text-align:center}
-    .occupancy-card .nights{font-size:28px;font-weight:700}
-    .occupancy-card .type{font-size:11px;color:rgba(255,255,255,0.7);margin-top:5px}
+    .kpi-card.adr .value{color:#e74c3c}
+    .occupancy-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-bottom:30px}
+    .occupancy-card{background:rgba(255,255,255,0.08);border-radius:10px;padding:12px;text-align:center}
+    .occupancy-card .nights{font-size:24px;font-weight:700}
+    .occupancy-card .type{font-size:10px;color:rgba(255,255,255,0.7);margin-top:4px}
     .occupancy-card.owner .nights{color:#3498db}
     .occupancy-card.guest .nights{color:#9b59b6}
     .occupancy-card.rental .nights{color:#2ecc71}
@@ -273,14 +261,28 @@ const dashboardHTML = `<!DOCTYPE html>
     .occupancy-card.ooo .nights{color:#7f8c8d}
     .charts-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(350px,1fr));gap:20px;margin-bottom:30px}
     .chart-card{background:rgba(255,255,255,0.1);border-radius:15px;padding:20px}
-    .chart-card h3{margin-bottom:15px;font-size:16px}
+    .chart-card h3{margin-bottom:15px;font-size:15px}
     .expense-section{background:rgba(255,255,255,0.1);border-radius:15px;padding:20px;margin-bottom:30px}
-    .expense-section h3{margin-bottom:20px}
-    .expense-category{margin-bottom:15px;padding-bottom:15px;border-bottom:1px solid rgba(255,255,255,0.1)}
-    .expense-category-header{display:flex;justify-content:space-between;margin-bottom:10px}
-    .expense-category-header h4{color:#4ecdc4;font-size:14px}
-    .expense-items{padding-left:15px}
-    .expense-item{display:flex;justify-content:space-between;padding:6px 0;font-size:13px;color:rgba(255,255,255,0.8)}
+    .expense-section h3{margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}
+    .expense-table{width:100%;border-collapse:collapse}
+    .expense-table th{text-align:left;padding:10px 8px;border-bottom:2px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.7);font-size:12px;font-weight:600}
+    .expense-table td{padding:8px;border-bottom:1px solid rgba(255,255,255,0.1);font-size:13px}
+    .expense-table .category-row{background:rgba(78,205,196,0.1)}
+    .expense-table .category-row td{color:#4ecdc4;font-weight:600;padding-top:12px}
+    .expense-table .item-row td:first-child{padding-left:20px;color:rgba(255,255,255,0.8)}
+    .expense-table .month-col{text-align:right;min-width:90px}
+    .expense-table .ytd-col{text-align:right;min-width:100px;color:#4ecdc4}
+    .expense-table .avg-col{text-align:right;min-width:80px;color:rgba(255,255,255,0.5);font-size:11px}
+    .anomaly{background:rgba(231,76,60,0.2) !important;position:relative}
+    .anomaly::after{content:'⚠️';position:absolute;right:5px;top:50%;transform:translateY(-50%)}
+    .anomaly-badge{display:inline-block;background:#e74c3c;color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;margin-left:5px}
+    .anomaly-section{background:rgba(231,76,60,0.1);border:1px solid rgba(231,76,60,0.3);border-radius:15px;padding:20px;margin-bottom:30px}
+    .anomaly-section h3{color:#e74c3c;margin-bottom:15px}
+    .anomaly-item{display:flex;justify-content:space-between;align-items:center;padding:10px;background:rgba(255,255,255,0.05);border-radius:8px;margin-bottom:8px}
+    .anomaly-item .info{flex:1}
+    .anomaly-item .name{font-weight:600}
+    .anomaly-item .detail{font-size:12px;color:rgba(255,255,255,0.6)}
+    .anomaly-item .amount{color:#e74c3c;font-weight:700;font-size:18px}
     .statements-list{background:rgba(255,255,255,0.1);border-radius:15px;padding:20px}
     .statement-item{display:flex;justify-content:space-between;align-items:center;padding:12px;background:rgba(255,255,255,0.05);border-radius:8px;margin-bottom:8px}
     .statement-item .month{font-weight:600}
@@ -288,7 +290,8 @@ const dashboardHTML = `<!DOCTYPE html>
     .statement-item .delete-btn{padding:6px 12px;background:rgba(255,107,107,0.2);border:none;border-radius:6px;color:#ff6b6b;cursor:pointer}
     .file-input{display:none}
     .empty-state{text-align:center;padding:40px;color:rgba(255,255,255,0.5)}
-    @media(max-width:768px){.charts-grid{grid-template-columns:1fr}}
+    .section-title{font-size:16px;margin-bottom:15px;display:flex;align-items:center;gap:10px}
+    @media(max-width:768px){.charts-grid{grid-template-columns:1fr}.expense-table{font-size:11px}}
   </style>
 </head>
 <body>
@@ -314,12 +317,7 @@ const dashboardHTML = `<!DOCTYPE html>
       </div>
     </div>
     <div class="view-controls">
-      <span class="view-label">View:</span>
-      <select id="viewMode" onchange="updateView()">
-        <option value="ytd">Year to Date</option>
-        <option value="month">Single Month</option>
-      </select>
-      <span class="view-label" style="margin-left:15px">Month:</span>
+      <span class="view-label">View Month:</span>
       <select id="monthSelect" onchange="updateView()">
         <option value="12">December</option><option value="11">November</option><option value="10">October</option>
         <option value="9">September</option><option value="8">August</option><option value="7">July</option>
@@ -329,11 +327,12 @@ const dashboardHTML = `<!DOCTYPE html>
     </div>
     <div class="kpi-grid">
       <div class="kpi-card"><div class="label">Current Balance</div><div class="value" id="kpiBalance">$0</div><div class="subtext" id="kpiBalanceDate">-</div></div>
-      <div class="kpi-card"><div class="label" id="expLabel">Expenses</div><div class="value" id="kpiExpenses">$0</div></div>
-      <div class="kpi-card highlight"><div class="label">Owner Revenue (YTD)</div><div class="value" id="kpiRevenue">$0</div><div class="subtext">50% of net rental</div></div>
+      <div class="kpi-card"><div class="label" id="expLabel">Month Expenses</div><div class="value" id="kpiExpenses">$0</div><div class="subtext" id="kpiExpYTD">YTD: $0</div></div>
+      <div class="kpi-card highlight"><div class="label">Owner Revenue</div><div class="value" id="kpiRevenue">$0</div><div class="subtext">YTD (50% of net)</div></div>
+      <div class="kpi-card adr"><div class="label">Avg Daily Rate</div><div class="value" id="kpiADR">$0</div><div class="subtext" id="kpiADRytd">YTD: $0</div></div>
       <div class="kpi-card"><div class="label">Occupancy</div><div class="value" id="kpiOccupancy">0%</div><div class="subtext" id="kpiOccSub">-</div></div>
     </div>
-    <h3 style="margin-bottom:15px;font-size:16px">Occupancy Breakdown</h3>
+    <h3 class="section-title">Occupancy Breakdown</h3>
     <div class="occupancy-grid">
       <div class="occupancy-card owner"><div class="nights" id="occOwner">0</div><div class="type">Owner</div></div>
       <div class="occupancy-card guest"><div class="nights" id="occGuest">0</div><div class="type">Guest</div></div>
@@ -342,15 +341,25 @@ const dashboardHTML = `<!DOCTYPE html>
       <div class="occupancy-card vacant"><div class="nights" id="occVacant">0</div><div class="type">Vacant</div></div>
       <div class="occupancy-card ooo"><div class="nights" id="occOOO">0</div><div class="type">OOO</div></div>
     </div>
+    <div class="anomaly-section" id="anomalySection" style="display:none">
+      <h3>⚠️ Expense Anomalies Detected</h3>
+      <div id="anomalyList"></div>
+    </div>
     <div class="charts-grid">
       <div class="chart-card"><h3>Monthly Expenses</h3><canvas id="expChart"></canvas></div>
       <div class="chart-card"><h3>Occupancy by Month</h3><canvas id="occChart"></canvas></div>
     </div>
-    <div class="expense-section"><h3>Expense Breakdown</h3><div id="expBreakdown"></div></div>
-    <div class="statements-list"><h3>Uploaded Statements</h3><div id="stmtList"></div></div>
+    <div class="expense-section">
+      <h3>Expense Breakdown <span style="font-size:12px;color:rgba(255,255,255,0.5);font-weight:normal">(Month vs YTD)</span></h3>
+      <table class="expense-table" id="expTable">
+        <thead><tr><th>Category / Item</th><th class="month-col">Month</th><th class="ytd-col">YTD</th><th class="avg-col">Avg/Mo</th></tr></thead>
+        <tbody id="expTableBody"></tbody>
+      </table>
+    </div>
+    <div class="statements-list"><h3 class="section-title">Uploaded Statements</h3><div id="stmtList"></div></div>
   </div>
   <script>
-    let statements=[],expChart=null,occChart=null,viewMode='ytd',selMonth=12;
+    let statements=[],expChart=null,occChart=null,selMonth=12;
     async function checkAuth(){try{const r=await fetch('/api/auth/status');const d=await r.json();if(d.authenticated){show();load();}}catch(e){}}
     document.getElementById('loginForm').onsubmit=async e=>{e.preventDefault();try{const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:document.getElementById('username').value,password:document.getElementById('password').value})});const d=await r.json();if(d.success){show();load();}else document.getElementById('loginError').textContent=d.error;}catch(e){document.getElementById('loginError').textContent='Failed';}};
     async function logout(){await fetch('/api/logout',{method:'POST'});document.getElementById('loginScreen').style.display='flex';document.getElementById('dashboard').style.display='none';}
@@ -358,20 +367,31 @@ const dashboardHTML = `<!DOCTYPE html>
     async function load(){try{statements=await(await fetch('/api/statements')).json();render();}catch(e){}}
     document.getElementById('fileInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;const fd=new FormData();fd.append('file',f);try{const r=await fetch('/api/upload',{method:'POST',body:fd});const d=await r.json();if(d.success){alert('Uploaded!');load();}else alert('Error: '+d.error);}catch(e){alert('Error: '+e.message);}e.target.value='';};
     async function del(id){if(!confirm('Delete?'))return;await fetch('/api/statements/'+id,{method:'DELETE'});load();}
-    function updateView(){viewMode=document.getElementById('viewMode').value;selMonth=parseInt(document.getElementById('monthSelect').value);render();}
+    function updateView(){selMonth=parseInt(document.getElementById('monthSelect').value);render();}
+    
     function render(){
-      if(!statements.length){document.getElementById('expBreakdown').innerHTML='<div class="empty-state">No statements uploaded</div>';document.getElementById('stmtList').innerHTML='<div class="empty-state">No data</div>';return;}
+      if(!statements.length){document.getElementById('expTableBody').innerHTML='<tr><td colspan="4" class="empty-state">No data</td></tr>';document.getElementById('stmtList').innerHTML='<div class="empty-state">No statements</div>';return;}
       statements.sort((a,b)=>a.year!==b.year?b.year-a.year:b.month-a.month);
       const s=statements[0],mn=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],fmn=['January','February','March','April','May','June','July','August','September','October','November','December'];
       const occ=s.occupancy||{},md=s.monthly_data||{},exp=s.expenses||{};
-      let od,ed,vl;
-      if(viewMode==='ytd'){od=occ.ytd||occ.current||{};ed=exp.totalYTD||s.total_expenses;vl='YTD '+s.year;}
-      else{const mo=md.occupancy||{};od=mo[selMonth]||occ.current||{};const me=md.expenses||{};ed=me[selMonth]?.total||(selMonth===s.month?s.total_expenses:0);vl=fmn[selMonth-1]+' '+s.year;}
+      
+      // Get month data
+      const mo=md.occupancy||{};
+      const od=mo[selMonth]||occ.current||{};
+      const me=md.expenses||{};
+      const monthExp=me[selMonth]?.total||(selMonth===s.month?s.total_expenses:0);
+      const rev=md.revenue||{};
+      const monthADR=rev[selMonth]?.adr||md.adr||0;
+      
       document.getElementById('kpiBalance').textContent=fmt(s.closing_balance);
       document.getElementById('kpiBalanceDate').textContent=mn[s.month-1]+' '+s.year;
-      document.getElementById('expLabel').textContent='Expenses ('+vl+')';
-      document.getElementById('kpiExpenses').textContent=fmt(ed);
+      document.getElementById('expLabel').textContent=fmn[selMonth-1]+' Expenses';
+      document.getElementById('kpiExpenses').textContent=fmt(monthExp);
+      document.getElementById('kpiExpYTD').textContent='YTD: '+fmt(exp.totalYTD||s.total_expenses);
       document.getElementById('kpiRevenue').textContent=fmt(s.owner_revenue_share);
+      document.getElementById('kpiADR').textContent=fmt(monthADR);
+      document.getElementById('kpiADRytd').textContent='YTD Avg: '+fmt(md.adrYTD||0);
+      
       const tn=(od.ownerNights||0)+(od.guestNights||0)+(od.complimentaryNights||0)+(od.rentalNights||0)+(od.vacantNights||0)+(od.oooNights||0);
       const on=(od.ownerNights||0)+(od.guestNights||0)+(od.complimentaryNights||0)+(od.rentalNights||0);
       document.getElementById('kpiOccupancy').textContent=(tn?Math.round(on/tn*100):0)+'%';
@@ -382,32 +402,85 @@ const dashboardHTML = `<!DOCTYPE html>
       document.getElementById('occRental').textContent=od.rentalNights||0;
       document.getElementById('occVacant').textContent=od.vacantNights||0;
       document.getElementById('occOOO').textContent=od.oooNights||0;
-      renderExp(exp);renderStmts();renderCharts(s,md);
+      
+      renderExpTable(exp,me,selMonth);
+      renderAnomalies(exp,me);
+      renderStmts();
+      renderCharts(s,md);
     }
-    function renderExp(exp){
-      const c=document.getElementById('expBreakdown'),cats=exp.categories||{},isYTD=viewMode!=='month';let h='';
+    
+    function renderExpTable(exp,me,month){
+      const cats=exp.categories||{};
       const cn={generalServices:'General Services',maintenance:'Maintenance',sharedExpenses:'Shared Expenses',utilities:'Utilities'};
-      for(const[k,d]of Object.entries(cats)){if(k==='adminFee')continue;const a=isYTD?d.ytd:d.current;if(!a)continue;
-        h+='<div class="expense-category"><div class="expense-category-header"><h4>'+cn[k]+'</h4><span>'+fmt(a)+'</span></div><div class="expense-items">';
-        if(d.items)for(const i of d.items){const ia=isYTD?i.ytd:i.current;if(ia)h+='<div class="expense-item"><span>'+i.name+'</span><span>'+fmt(ia)+'</span></div>';}
-        h+='</div></div>';}
-      if(cats.adminFee){const aa=isYTD?cats.adminFee.ytd:cats.adminFee.current;h+='<div class="expense-category"><div class="expense-category-header"><h4>15% Admin Fee</h4><span>'+fmt(aa)+'</span></div></div>';}
-      c.innerHTML=h||'<div class="empty-state">No data</div>';
+      let h='';
+      
+      for(const[k,d]of Object.entries(cats)){
+        if(k==='adminFee')continue;
+        const catMonthTotal=d.items?.reduce((sum,i)=>{const mv=i.monthly?.[month]||0;return sum+mv;},0)||0;
+        const avgPerMonth=d.ytd?(d.ytd/12).toFixed(2):0;
+        h+='<tr class="category-row"><td>'+cn[k]+'</td><td class="month-col">'+fmt(catMonthTotal)+'</td><td class="ytd-col">'+fmt(d.ytd)+'</td><td class="avg-col">'+fmt(avgPerMonth)+'</td></tr>';
+        if(d.items){
+          for(const i of d.items){
+            const mv=i.monthly?.[month]||i.current||0;
+            const avg=i.ytd?(i.ytd/12):0;
+            const isAnomaly=avg>0&&mv>(avg*1.5);
+            h+='<tr class="item-row'+(isAnomaly?' anomaly':'')+'"><td>'+i.name+(isAnomaly?'<span class="anomaly-badge">+'+Math.round((mv/avg-1)*100)+'%</span>':'')+'</td><td class="month-col">'+fmt(mv)+'</td><td class="ytd-col">'+fmt(i.ytd)+'</td><td class="avg-col">'+fmt(avg)+'</td></tr>';
+          }
+        }
+      }
+      if(cats.adminFee){
+        const adminMonth=cats.adminFee.current||0;
+        const adminAvg=cats.adminFee.ytd?(cats.adminFee.ytd/12):0;
+        h+='<tr class="category-row"><td>15% Admin Fee</td><td class="month-col">'+fmt(adminMonth)+'</td><td class="ytd-col">'+fmt(cats.adminFee.ytd)+'</td><td class="avg-col">'+fmt(adminAvg)+'</td></tr>';
+      }
+      document.getElementById('expTableBody').innerHTML=h||'<tr><td colspan="4">No expense data</td></tr>';
     }
+    
+    function renderAnomalies(exp,me){
+      const cats=exp.categories||{};
+      const anomalies=[];
+      const fmn=['January','February','March','April','May','June','July','August','September','October','November','December'];
+      
+      for(const[k,d]of Object.entries(cats)){
+        if(k==='adminFee'||!d.items)continue;
+        for(const i of d.items){
+          if(!i.monthly)continue;
+          const avg=i.ytd?(i.ytd/12):0;
+          if(avg<=0)continue;
+          for(let m=1;m<=12;m++){
+            const mv=i.monthly[m]||0;
+            if(mv>(avg*1.5)&&mv>100){
+              anomalies.push({name:i.name,month:fmn[m-1],amount:mv,avg:avg,pct:Math.round((mv/avg-1)*100)});
+            }
+          }
+        }
+      }
+      
+      const section=document.getElementById('anomalySection');
+      const list=document.getElementById('anomalyList');
+      if(anomalies.length===0){section.style.display='none';return;}
+      
+      section.style.display='block';
+      anomalies.sort((a,b)=>b.pct-a.pct);
+      list.innerHTML=anomalies.slice(0,5).map(a=>'<div class="anomaly-item"><div class="info"><div class="name">'+a.name+'</div><div class="detail">'+a.month+': '+fmt(a.amount)+' vs avg '+fmt(a.avg)+' (+'+a.pct+'%)</div></div><div class="amount">+'+a.pct+'%</div></div>').join('');
+    }
+    
     function renderStmts(){
-      const c=document.getElementById('stmtList'),fmn=['January','February','March','April','May','June','July','August','September','October','November','December'];
-      c.innerHTML=statements.map(s=>'<div class="statement-item"><div><div class="month">'+fmn[s.month-1]+' '+s.year+'</div><div class="filename">'+(s.filename||'-')+'</div></div><div><span style="color:#4ecdc4;margin-right:15px">'+fmt(s.total_expenses)+'</span><button class="delete-btn" onclick="del('+s.id+')">Delete</button></div></div>').join('')||'<div class="empty-state">No statements</div>';
+      const fmn=['January','February','March','April','May','June','July','August','September','October','November','December'];
+      document.getElementById('stmtList').innerHTML=statements.map(s=>'<div class="statement-item"><div><div class="month">'+fmn[s.month-1]+' '+s.year+'</div><div class="filename">'+(s.filename||'-')+'</div></div><div><span style="color:#4ecdc4;margin-right:15px">'+fmt(s.total_expenses)+'</span><button class="delete-btn" onclick="del('+s.id+')">Delete</button></div></div>').join('')||'<div class="empty-state">No statements</div>';
     }
+    
     function renderCharts(s,md){
       const mn=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
       const em=md.expenses||{},ed=[];for(let m=1;m<=12;m++)ed.push(em[m]?.total||0);
       if(expChart)expChart.destroy();
-      expChart=new Chart(document.getElementById('expChart'),{type:'bar',data:{labels:mn,datasets:[{label:'Expenses',data:ed,backgroundColor:'rgba(78,205,196,0.6)',borderColor:'#4ecdc4',borderWidth:1}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{color:'rgba(255,255,255,0.6)'},grid:{color:'rgba(255,255,255,0.1)'}},x:{ticks:{color:'rgba(255,255,255,0.6)'},grid:{display:false}}}}});
+      expChart=new Chart(document.getElementById('expChart'),{type:'bar',data:{labels:mn,datasets:[{label:'Expenses',data:ed,backgroundColor:ed.map((v,i)=>i+1===selMonth?'rgba(78,205,196,1)':'rgba(78,205,196,0.4)'),borderColor:'#4ecdc4',borderWidth:1}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{color:'rgba(255,255,255,0.6)'},grid:{color:'rgba(255,255,255,0.1)'}},x:{ticks:{color:'rgba(255,255,255,0.6)'},grid:{display:false}}}}});
       const om=md.occupancy||{},od=[],gd=[],rd=[],vd=[];
       for(let m=1;m<=12;m++){const mo=om[m]||{};od.push(mo.ownerNights||0);gd.push(mo.guestNights||0);rd.push(mo.rentalNights||0);vd.push(mo.vacantNights||0);}
       if(occChart)occChart.destroy();
       occChart=new Chart(document.getElementById('occChart'),{type:'bar',data:{labels:mn,datasets:[{label:'Owner',data:od,backgroundColor:'#3498db'},{label:'Guest',data:gd,backgroundColor:'#9b59b6'},{label:'Rental',data:rd,backgroundColor:'#2ecc71'},{label:'Vacant',data:vd,backgroundColor:'#95a5a6'}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{color:'rgba(255,255,255,0.8)',boxWidth:12}}},scales:{x:{stacked:true,ticks:{color:'rgba(255,255,255,0.6)'}},y:{stacked:true,ticks:{color:'rgba(255,255,255,0.6)'},grid:{color:'rgba(255,255,255,0.1)'}}}}});
     }
+    
     function fmt(v){return'$'+(parseFloat(v)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
     checkAuth();
   </script>
