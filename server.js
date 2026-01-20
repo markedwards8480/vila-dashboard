@@ -6,8 +6,6 @@ const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
 const pdfParse = require('pdf-parse');
 const path = require('path');
-const fs = require('fs');
-const Anthropic = require('@anthropic-ai/sdk');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,162 +16,109 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
-// Anthropic client
-const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY
-}) : null;
+// Initialize database tables
+async function initDB() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS monthly_statements (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        statement_date DATE NOT NULL,
+        year INTEGER NOT NULL,
+        month INTEGER NOT NULL,
+        filename VARCHAR(255),
+        closing_balance DECIMAL(12,2),
+        total_expenses DECIMAL(12,2),
+        owner_revenue_share DECIMAL(12,2),
+        rental_revenue DECIMAL(12,2),
+        occupancy JSONB,
+        expenses JSONB,
+        utilities JSONB,
+        raw_text TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, year, month)
+      )
+    `);
+    
+    // Create default user if not exists
+    const userCheck = await pool.query('SELECT id FROM users WHERE username = $1', ['admin']);
+    if (userCheck.rows.length === 0) {
+      const hashedPassword = await bcrypt.hash(process.env.ADMIN_PASSWORD || 'villa2025', 10);
+      await pool.query('INSERT INTO users (username, password) VALUES ($1, $2)', ['admin', hashedPassword]);
+      console.log('Default admin user created');
+    }
+    
+    console.log('Database initialized');
+  } catch (err) {
+    console.error('Database initialization error:', err);
+  }
+}
 
 // Middleware
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
 // Trust proxy for Railway
 app.set('trust proxy', 1);
 
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'villa-dashboard-secret-key-change-in-production',
+  secret: process.env.SESSION_SECRET || 'villa-dashboard-secret-2025',
   resave: false,
   saveUninitialized: false,
   cookie: { 
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    sameSite: 'lax',
-    maxAge: 24 * 60 * 60 * 1000
+    maxAge: 24 * 60 * 60 * 1000,
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
   }
 }));
 
-// Serve static files
-app.use(express.static(path.join(__dirname, 'public')));
-
-// File upload configuration
+// File upload config
 const storage = multer.memoryStorage();
-const upload = multer({ 
-  storage,
-  limits: { fileSize: 50 * 1024 * 1024 }
-});
-
-// Initialize database
-async function initDatabase() {
-  const client = await pool.connect();
-  try {
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(255) UNIQUE NOT NULL,
-        password_hash VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-      
-      CREATE TABLE IF NOT EXISTS monthly_statements (
-        id SERIAL PRIMARY KEY,
-        statement_date DATE NOT NULL,
-        year INTEGER NOT NULL,
-        month INTEGER NOT NULL,
-        opening_balance DECIMAL(12,2),
-        closing_balance DECIMAL(12,2),
-        total_charges DECIMAL(12,2),
-        total_payments DECIMAL(12,2),
-        owner_nights INTEGER DEFAULT 0,
-        guest_nights INTEGER DEFAULT 0,
-        rental_nights INTEGER DEFAULT 0,
-        vacant_nights INTEGER DEFAULT 0,
-        rental_revenue DECIMAL(12,2) DEFAULT 0,
-        owner_revenue_share DECIMAL(12,2) DEFAULT 0,
-        raw_data JSONB,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(year, month)
-      );
-      
-      CREATE TABLE IF NOT EXISTS expense_categories (
-        id SERIAL PRIMARY KEY,
-        statement_id INTEGER REFERENCES monthly_statements(id) ON DELETE CASCADE,
-        category VARCHAR(255) NOT NULL,
-        subcategory VARCHAR(255),
-        amount DECIMAL(12,2) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-      
-      CREATE TABLE IF NOT EXISTS utility_readings (
-        id SERIAL PRIMARY KEY,
-        statement_id INTEGER REFERENCES monthly_statements(id) ON DELETE CASCADE,
-        utility_type VARCHAR(50) NOT NULL,
-        consumption DECIMAL(12,2),
-        cost DECIMAL(12,2),
-        unit VARCHAR(20),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-      
-      CREATE TABLE IF NOT EXISTS hotel_folios (
-        id SERIAL PRIMARY KEY,
-        folio_date DATE NOT NULL,
-        guest_name VARCHAR(255),
-        arrival_date DATE,
-        departure_date DATE,
-        total_charges DECIMAL(12,2),
-        raw_data JSONB,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-      
-      CREATE TABLE IF NOT EXISTS folio_line_items (
-        id SERIAL PRIMARY KEY,
-        folio_id INTEGER REFERENCES hotel_folios(id) ON DELETE CASCADE,
-        item_date DATE,
-        description VARCHAR(500),
-        category VARCHAR(100),
-        amount DECIMAL(12,2),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-      
-      CREATE TABLE IF NOT EXISTS chat_messages (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id),
-        role VARCHAR(20) NOT NULL,
-        content TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-      
-      CREATE TABLE IF NOT EXISTS uploaded_files (
-        id SERIAL PRIMARY KEY,
-        filename VARCHAR(255) NOT NULL,
-        file_type VARCHAR(50),
-        file_size INTEGER,
-        upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        processed BOOLEAN DEFAULT FALSE,
-        processing_notes TEXT
-      );
-    `);
-    
-    const defaultPassword = process.env.DEFAULT_PASSWORD || 'villa2025';
-    const hashedPassword = await bcrypt.hash(defaultPassword, 10);
-    await client.query(`
-      INSERT INTO users (username, password_hash)
-      VALUES ('admin', $1)
-      ON CONFLICT (username) DO NOTHING
-    `, [hashedPassword]);
-    
-    console.log('Database initialized successfully');
-  } catch (err) {
-    console.error('Database initialization error:', err);
-  } finally {
-    client.release();
-  }
-}
+const upload = multer({ storage: storage });
 
 // Auth middleware
 function requireAuth(req, res, next) {
   if (req.session && req.session.userId) {
-    next();
-  } else {
-    res.status(401).json({ error: 'Authentication required' });
+    return next();
   }
+  res.status(401).json({ error: 'Unauthorized' });
 }
 
-// Helper function to clean numbers from PDF (handles spaces like "1 24,206.05" or "$ 1 24,206.05")
+// ============================================
+// PDF PARSING - Amanyara Statement Format
+// ============================================
+
+// Helper function to clean numbers from PDF (handles spaces like "1 24,206.05" or "$ 8 9,314.94")
 function cleanNumber(str) {
   if (!str) return 0;
-  // Remove $ sign, then remove ALL spaces, then parse
-  const cleaned = str.replace(/\$/g, '').replace(/\s+/g, '').replace(/,/g, '');
+  // Remove $ sign, then remove ALL spaces, then remove commas
+  let cleaned = str.replace(/\$/g, '').replace(/\s+/g, '').replace(/,/g, '');
+  // Handle negative numbers in parentheses like "(4,631.55)"
+  if (cleaned.startsWith('(') && cleaned.endsWith(')')) {
+    cleaned = '-' + cleaned.slice(1, -1);
+  }
   const num = parseFloat(cleaned);
   return isNaN(num) ? 0 : num;
+}
+
+// Extract first dollar amount after a pattern (for current month column)
+function extractFirstAmount(pattern, text) {
+  const regex = new RegExp(pattern + '.*?\\s+([\\d\\s,]+\\.\\d{2})', 'i');
+  const match = text.match(regex);
+  if (match) {
+    return cleanNumber(match[1]);
+  }
+  return 0;
 }
 
 // Parse monthly statement PDF - Amanyara specific format
@@ -204,7 +149,7 @@ async function parseMonthlyStatement(buffer, filename) {
     rawText: text
   };
   
-  // Parse date from filename - format: Villa_08_-November_Statement_2025.pdf
+  // Parse date from filename - format: Villa_08_-December_Statement_2025.pdf
   const dateMatch = filename.match(/(\w+)[\s_-]*Statement[\s_-]*(\d{4})/i);
   if (dateMatch) {
     const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 
@@ -214,128 +159,143 @@ async function parseMonthlyStatement(buffer, filename) {
       result.month = monthIdx + 1;
       result.year = parseInt(dateMatch[2]);
       result.statementDate = new Date(result.year, result.month - 1, 1);
-      console.log('Parsed date:', result.month, result.year);
+      console.log('Parsed date from filename:', result.month, '/', result.year);
     }
   }
   
-  // Parse closing balance - look for "November 2025 Statement S11 4 0,366.98 $ 1 24,206.05"
-  // The last $ amount on that line is the closing balance
-  const novStatementMatch = text.match(/November 2025 Statement.*?\$\s*([\d\s,\.]+)/g);
-  if (novStatementMatch && novStatementMatch.length > 0) {
-    const lastMatch = novStatementMatch[novStatementMatch.length - 1];
-    const balanceMatch = lastMatch.match(/\$\s*([\d\s,\.]+)/);
-    if (balanceMatch) {
-      result.closingBalance = cleanNumber(balanceMatch[1]);
-      console.log('Closing balance:', result.closingBalance);
+  // Determine month name for patterns
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                      'July', 'August', 'September', 'October', 'November', 'December'];
+  const currentMonthName = result.month ? monthNames[result.month - 1] : 'December';
+  
+  // Parse closing balance - look for "[Month] 2025 Statement S## [expense] $ [balance]"
+  // Example: "December 2025 Statement S12 4 1,160.93 $ 8 9,314.94"
+  const statementPattern = new RegExp(currentMonthName + '\\s+\\d{4}\\s+Statement\\s+S\\d+\\s+([\\d\\s,]+\\.\\d{2})\\s+\\$\\s*([\\d\\s,]+\\.\\d{2})', 'i');
+  const statementMatch = text.match(statementPattern);
+  if (statementMatch) {
+    result.totalExpenses = cleanNumber(statementMatch[1]);
+    result.closingBalance = cleanNumber(statementMatch[2]);
+    console.log('Statement line - Expenses:', result.totalExpenses, 'Balance:', result.closingBalance);
+  }
+  
+  // Fallback: Parse from TOTAL EXPENSES line if statement line didn't work
+  if (!result.totalExpenses) {
+    const totalExpMatch = text.match(/TOTAL EXPENSES\s+([\d\s,]+\.\d{2})/i);
+    if (totalExpMatch) {
+      result.totalExpenses = cleanNumber(totalExpMatch[1]);
+      console.log('Total expenses from TOTAL EXPENSES line:', result.totalExpenses);
     }
   }
   
-  // Alternative: Look for the final balance line "$ 5 4,361.09 528,267.65 458,422.69 $ 1 24,206.05"
-  if (!result.closingBalance || result.closingBalance < 1000) {
-    const finalLineMatch = text.match(/\$\s*[\d\s,\.]+\s+[\d,\.]+\s+[\d,\.]+\s+\$\s*([\d\s,\.]+)/);
-    if (finalLineMatch) {
-      result.closingBalance = cleanNumber(finalLineMatch[1]);
-      console.log('Closing balance (from final line):', result.closingBalance);
-    }
-  }
-  
-  // Parse occupancy - format: "Villa Owner Usage 4 19" where first number is current month
+  // Parse occupancy - "Villa Owner Usage 13 46" (first number is current month, second is YTD)
   const ownerMatch = text.match(/Villa Owner Usage\s+(\d+)\s+(\d+)/i);
-  const guestMatch = text.match(/Villa Owner Guest Usage\s+(\d+)\s+(\d+)/i);
-  const rentalMatch = text.match(/Villa Rental\s+(\d+)\s+(\d+)/i);
-  const vacantMatch = text.match(/Vacant\s+(\d+)\s+(\d+)/i);
-  
   if (ownerMatch) {
     result.occupancy.ownerNights = parseInt(ownerMatch[1]);
     console.log('Owner nights:', result.occupancy.ownerNights);
   }
+  
+  const guestMatch = text.match(/Villa Owner Guest Usage\s+(\d+)\s+(\d+)/i);
   if (guestMatch) {
     result.occupancy.guestNights = parseInt(guestMatch[1]);
     console.log('Guest nights:', result.occupancy.guestNights);
   }
+  
+  const rentalMatch = text.match(/Villa Rental\s+(\d+)\s+(\d+)/i);
   if (rentalMatch) {
     result.occupancy.rentalNights = parseInt(rentalMatch[1]);
     console.log('Rental nights:', result.occupancy.rentalNights);
   }
+  
+  const vacantMatch = text.match(/Vacant\s+(\d+)\s+(\d+)/i);
   if (vacantMatch) {
     result.occupancy.vacantNights = parseInt(vacantMatch[1]);
     console.log('Vacant nights:', result.occupancy.vacantNights);
   }
   
-  // Parse 50% Owner Revenue - format: "50% OWNER REVENUE - 2 05,349.98"
-  const revenueMatch = text.match(/50% OWNER REVENUE[^\d]+([\d\s,\.]+)/i);
+  // Parse 50% Owner Revenue - first amount after pattern
+  const revenueMatch = text.match(/50% OWNER REVENUE\s+-?\s*([\d\s,]+\.\d{2})/i);
   if (revenueMatch) {
     result.ownerRevenueShare = cleanNumber(revenueMatch[1]);
     console.log('Owner revenue share:', result.ownerRevenueShare);
   }
   
-  // Parse Total Expenses - format: "TOTAL EXPENSES 4 0,366.98"
-  const totalExpMatch = text.match(/TOTAL EXPENSES\s+([\d\s,\.]+)/i);
-  if (totalExpMatch) {
-    result.totalExpenses = cleanNumber(totalExpMatch[1]);
-    console.log('Total expenses:', result.totalExpenses);
+  // Parse Gross Villa Revenue
+  const grossMatch = text.match(/Gross Villa Revenue\s+-?\s*([\d\s,]+\.\d{2})/i);
+  if (grossMatch) {
+    result.rentalRevenue = cleanNumber(grossMatch[1]);
+    console.log('Gross rental revenue:', result.rentalRevenue);
   }
   
-  // Parse individual expenses - look for category followed by numbers
-  // Format: "Contract Services 6 ,100.00 4 5,939.50" - first number is current month
+  // Parse expense categories (first number after each label is current month)
   const expensePatterns = [
-    { regex: /Contract Services\s+([\d\s,\.]+)/i, category: 'Maintenance', subcategory: 'Contract Services' },
-    { regex: /Electricity\s+([\d\s,\.]+)/i, category: 'Utilities', subcategory: 'Electricity' },
-    { regex: /Water\s+([\d\s,\.]+)/i, category: 'Utilities', subcategory: 'Water' },
-    { regex: /Cleaning supplies\s+([\d\s,\.]+)/i, category: 'General Services', subcategory: 'Cleaning Supplies' },
-    { regex: /Laundry\s+([\d\s,\.]+)/i, category: 'General Services', subcategory: 'Laundry' },
-    { regex: /Guest amenities\s+([\d\s,\.]+)/i, category: 'General Services', subcategory: 'Guest Amenities' },
-    { regex: /Telephone.*?Internet\s+([\d\s,\.]+)/i, category: 'General Services', subcategory: 'Telecom' },
-    { regex: /Security Program\s+([\d\s,\.]+)/i, category: 'Security', subcategory: 'Security Program' },
-    { regex: /15% Administration Fee\s+([\d\s,\.]+)/i, category: 'Admin', subcategory: 'Admin Fee (15%)' },
-    { regex: /Pest Control.*?Waste Removal\s+([\d\s,\.]+)/i, category: 'Maintenance', subcategory: 'Pest & Waste' },
-    { regex: /Maintenance Materials\s+([\d\s,\.]+)/i, category: 'Maintenance', subcategory: 'Materials' },
-    { regex: /Landscaping Program\s+([\d\s,\.]+)/i, category: 'Maintenance', subcategory: 'Landscaping Program' },
-    { regex: /Maintenance Program\s+([\d\s,\.]+)/i, category: 'Maintenance', subcategory: 'Maintenance Program' },
+    { pattern: 'Payroll & related Expenses\\*', category: 'Payroll', subcategory: 'Staff Payroll' },
+    { pattern: 'Administrative & Shared Staff\\*', category: 'Payroll', subcategory: 'Admin Staff' },
+    { pattern: 'Guest amenities', category: 'General Services', subcategory: 'Guest Amenities' },
+    { pattern: 'Cleaning supplies', category: 'General Services', subcategory: 'Cleaning Supplies' },
+    { pattern: 'Laundry', category: 'General Services', subcategory: 'Laundry' },
+    { pattern: 'Other operating supplies', category: 'General Services', subcategory: 'Operating Supplies' },
+    { pattern: 'Telephone.*?Internet', category: 'General Services', subcategory: 'Telecom' },
+    { pattern: 'Printing and Stationary', category: 'General Services', subcategory: 'Printing' },
+    { pattern: 'Liability Insurance', category: 'Insurance', subcategory: 'Liability Insurance' },
+    { pattern: 'Materials - Maintenance', category: 'Maintenance', subcategory: 'Materials (Direct)' },
+    { pattern: 'Materials - Landscapting', category: 'Maintenance', subcategory: 'Landscaping Materials' },
+    { pattern: 'Contract Services', category: 'Maintenance', subcategory: 'Contract Services' },
+    { pattern: 'Fuel', category: 'Maintenance', subcategory: 'Fuel' },
+    { pattern: 'Maintenance Program \\(pyrl', category: 'Maintenance', subcategory: 'Maintenance Program' },
+    { pattern: 'Maintenance Materials', category: 'Maintenance', subcategory: 'Materials (Shared)' },
+    { pattern: 'Landscaping Program \\(pyrl', category: 'Maintenance', subcategory: 'Landscaping Program' },
+    { pattern: 'Pest Control.*?Waste Removal', category: 'Maintenance', subcategory: 'Pest & Waste' },
+    { pattern: 'Security Program', category: 'Security', subcategory: 'Security Program' },
+    { pattern: '15% Administration Fee', category: 'Admin', subcategory: 'Admin Fee (15%)' },
   ];
   
-  for (const { regex, category, subcategory } of expensePatterns) {
-    const match = text.match(regex);
-    if (match) {
-      const amount = cleanNumber(match[1]);
-      if (amount > 0) {
-        result.expenses.push({ category, subcategory, amount });
-        console.log('Expense:', subcategory, amount);
-      }
+  for (const { pattern, category, subcategory } of expensePatterns) {
+    const amount = extractFirstAmount(pattern, text);
+    if (amount > 0) {
+      result.expenses.push({ category, subcategory, amount });
+      console.log('Expense:', subcategory, '-', amount);
     }
   }
   
-  // Parse utilities from page with "Total KWH" and "Total Energy Cost"
-  const kwhMatch = text.match(/Total KWH\s+([\d\s,\.]+)/i);
-  const energyCostMatch = text.match(/Total Energy Cost\s+([\d\s,\.]+)/i);
-  if (kwhMatch && energyCostMatch) {
+  // Parse utilities
+  const electricityAmount = extractFirstAmount('Electricity', text);
+  if (electricityAmount > 0) {
+    // Try to get KWH consumption
+    const kwhMatch = text.match(/Total KWH\s+([\d\s,]+)/i);
     result.utilities.push({
       type: 'Electricity',
-      consumption: cleanNumber(kwhMatch[1]),
-      cost: cleanNumber(energyCostMatch[1]),
+      consumption: kwhMatch ? cleanNumber(kwhMatch[1]) : 0,
+      cost: electricityAmount,
       unit: 'KWH'
     });
-    console.log('Electricity:', cleanNumber(kwhMatch[1]), 'KWH, $', cleanNumber(energyCostMatch[1]));
+    // Also add to expenses for totaling
+    result.expenses.push({ category: 'Utilities', subcategory: 'Electricity', amount: electricityAmount });
+    console.log('Electricity:', electricityAmount);
   }
   
-  const waterGallons = text.match(/Villa Consumption\s+([\d\s,\.]+)/i);
-  const waterCost = text.match(/Total Water Consumption\s+\$?\s*([\d\s,\.]+)/i);
-  if (waterGallons) {
+  const waterAmount = extractFirstAmount('Water', text);
+  if (waterAmount > 0) {
+    // Try to get gallons consumption
+    const gallonsMatch = text.match(/Villa Consumption\s+([\d\s,]+)/i);
     result.utilities.push({
       type: 'Water',
-      consumption: cleanNumber(waterGallons[1]),
-      cost: waterCost ? cleanNumber(waterCost[1]) : 0,
+      consumption: gallonsMatch ? cleanNumber(gallonsMatch[1]) : 0,
+      cost: waterAmount,
       unit: 'Gallons'
     });
-    console.log('Water:', cleanNumber(waterGallons[1]), 'Gallons');
+    // Also add to expenses for totaling
+    result.expenses.push({ category: 'Utilities', subcategory: 'Water', amount: waterAmount });
+    console.log('Water:', waterAmount);
   }
   
   console.log('=== PARSING COMPLETE ===');
-  console.log('Result summary:', {
+  console.log('Summary:', {
     date: result.statementDate,
-    balance: result.closingBalance,
-    occupancy: result.occupancy,
+    month: result.month,
+    year: result.year,
+    closingBalance: result.closingBalance,
     totalExpenses: result.totalExpenses,
+    occupancy: result.occupancy,
     expenseCount: result.expenses.length,
     ownerRevenue: result.ownerRevenueShare
   });
@@ -343,58 +303,14 @@ async function parseMonthlyStatement(buffer, filename) {
   return result;
 }
 
-// Parse hotel folio PDF
-async function parseHotelFolio(buffer, filename) {
-  const data = await pdfParse(buffer);
-  const text = data.text;
-  
-  const result = {
-    guestName: null,
-    arrivalDate: null,
-    departureDate: null,
-    totalCharges: 0,
-    lineItems: [],
-    rawText: text
-  };
-  
-  const nameMatch = text.match(/Mr\.\s+(\w+\s+\w+)/i) || text.match(/Mrs\.\s+(\w+\s+\w+)/i);
-  if (nameMatch) {
-    result.guestName = nameMatch[1];
-  }
-  
-  const arrivalMatch = text.match(/Arrival\s*:?\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
-  const departureMatch = text.match(/Departure\s*:?\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
-  if (arrivalMatch) result.arrivalDate = arrivalMatch[1];
-  if (departureMatch) result.departureDate = departureMatch[1];
-  
-  const linePatterns = [
-    { pattern: /Transportation\s+([\d,]+\.?\d*)/gi, category: 'Transportation' },
-    { pattern: /Villa Owner Private Bar\s+([\d,]+\.?\d*)/gi, category: 'Bar' },
-    { pattern: /Tax - Government\s+([\d,]+\.?\d*)/gi, category: 'Tax' },
-    { pattern: /Spa.*?\s+([\d,]+\.?\d*)/gi, category: 'Spa' },
-    { pattern: /Private Dining.*Food\s+([\d,]+\.?\d*)/gi, category: 'Dining' },
-    { pattern: /Villa Owner Groceries\s+([\d,]+\.?\d*)/gi, category: 'Groceries' }
-  ];
-  
-  for (const { pattern, category } of linePatterns) {
-    let match;
-    while ((match = pattern.exec(text)) !== null) {
-      const amount = parseFloat(match[1].replace(/,/g, ''));
-      result.lineItems.push({ category, amount, description: match[0].trim() });
-      result.totalCharges += amount;
-    }
-  }
-  
-  return result;
-}
-
-// API Routes
+// ============================================
+// API ROUTES
+// ============================================
 
 // Login
 app.post('/api/login', async (req, res) => {
-  const { username, password } = req.body;
-  
   try {
+    const { username, password } = req.body;
     const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
     
     if (result.rows.length === 0) {
@@ -402,9 +318,9 @@ app.post('/api/login', async (req, res) => {
     }
     
     const user = result.rows[0];
-    const validPassword = await bcrypt.compare(password, user.password_hash);
+    const valid = await bcrypt.compare(password, user.password);
     
-    if (!validPassword) {
+    if (!valid) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     
@@ -433,279 +349,824 @@ app.get('/api/auth/status', (req, res) => {
   }
 });
 
-// Change password
-app.post('/api/change-password', requireAuth, async (req, res) => {
-  const { currentPassword, newPassword } = req.body;
-  
+// Upload statement
+app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM users WHERE id = $1', [req.session.userId]);
-    const user = result.rows[0];
-    
-    const validPassword = await bcrypt.compare(currentPassword, user.password_hash);
-    if (!validPassword) {
-      return res.status(401).json({ error: 'Current password is incorrect' });
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
     }
     
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hashedPassword, req.session.userId]);
+    console.log('Processing file:', req.file.originalname);
+    const parsed = await parseMonthlyStatement(req.file.buffer, req.file.originalname);
     
+    if (!parsed.month || !parsed.year) {
+      return res.status(400).json({ error: 'Could not parse date from statement' });
+    }
+    
+    // Upsert into database
+    await pool.query(`
+      INSERT INTO monthly_statements 
+        (user_id, statement_date, year, month, filename, closing_balance, total_expenses, 
+         owner_revenue_share, rental_revenue, occupancy, expenses, utilities, raw_text)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      ON CONFLICT (user_id, year, month) 
+      DO UPDATE SET
+        filename = EXCLUDED.filename,
+        closing_balance = EXCLUDED.closing_balance,
+        total_expenses = EXCLUDED.total_expenses,
+        owner_revenue_share = EXCLUDED.owner_revenue_share,
+        rental_revenue = EXCLUDED.rental_revenue,
+        occupancy = EXCLUDED.occupancy,
+        expenses = EXCLUDED.expenses,
+        utilities = EXCLUDED.utilities,
+        raw_text = EXCLUDED.raw_text
+    `, [
+      req.session.userId,
+      parsed.statementDate,
+      parsed.year,
+      parsed.month,
+      req.file.originalname,
+      parsed.closingBalance,
+      parsed.totalExpenses,
+      parsed.ownerRevenueShare,
+      parsed.rentalRevenue,
+      JSON.stringify(parsed.occupancy),
+      JSON.stringify(parsed.expenses),
+      JSON.stringify(parsed.utilities),
+      parsed.rawText
+    ]);
+    
+    res.json({ 
+      success: true, 
+      parsed: {
+        month: parsed.month,
+        year: parsed.year,
+        closingBalance: parsed.closingBalance,
+        totalExpenses: parsed.totalExpenses,
+        occupancy: parsed.occupancy,
+        expenseCount: parsed.expenses.length,
+        ownerRevenue: parsed.ownerRevenueShare
+      }
+    });
+  } catch (err) {
+    console.error('Upload error:', err);
+    res.status(500).json({ error: 'Failed to process statement: ' + err.message });
+  }
+});
+
+// Get all statements
+app.get('/api/statements', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, statement_date, year, month, filename, closing_balance, 
+             total_expenses, owner_revenue_share, rental_revenue, occupancy, expenses, utilities
+      FROM monthly_statements 
+      WHERE user_id = $1 
+      ORDER BY year DESC, month DESC
+    `, [req.session.userId]);
+    
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get statements error:', err);
+    res.status(500).json({ error: 'Failed to fetch statements' });
+  }
+});
+
+// Delete statement
+app.delete('/api/statements/:id', requireAuth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM monthly_statements WHERE id = $1 AND user_id = $2', 
+      [req.params.id, req.session.userId]);
     res.json({ success: true });
   } catch (err) {
-    console.error('Password change error:', err);
-    res.status(500).json({ error: 'Failed to change password' });
+    console.error('Delete error:', err);
+    res.status(500).json({ error: 'Failed to delete statement' });
   }
 });
 
-// Upload and process PDF
-app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No file uploaded' });
-  }
-  
-  const { originalname, buffer, size } = req.file;
-  const fileType = req.body.fileType || 'statement';
-  
-  try {
-    const uploadResult = await pool.query(
-      'INSERT INTO uploaded_files (filename, file_type, file_size) VALUES ($1, $2, $3) RETURNING id',
-      [originalname, fileType, size]
-    );
-    const uploadId = uploadResult.rows[0].id;
+// ============================================
+// FRONTEND HTML
+// ============================================
+
+const dashboardHTML = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Villa 08 - Amanyara Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     
-    let parseResult;
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      min-height: 100vh;
+      color: #fff;
+    }
     
-    if (fileType === 'statement') {
-      parseResult = await parseMonthlyStatement(buffer, originalname);
-      
-      if (parseResult.year && parseResult.month) {
-        const statementResult = await pool.query(`
-          INSERT INTO monthly_statements 
-          (statement_date, year, month, closing_balance, owner_nights, guest_nights, 
-           rental_nights, vacant_nights, rental_revenue, owner_revenue_share, raw_data)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-          ON CONFLICT (year, month) DO UPDATE SET
-            closing_balance = EXCLUDED.closing_balance,
-            owner_nights = EXCLUDED.owner_nights,
-            guest_nights = EXCLUDED.guest_nights,
-            rental_nights = EXCLUDED.rental_nights,
-            vacant_nights = EXCLUDED.vacant_nights,
-            rental_revenue = EXCLUDED.rental_revenue,
-            owner_revenue_share = EXCLUDED.owner_revenue_share,
-            raw_data = EXCLUDED.raw_data
-          RETURNING id
-        `, [
-          parseResult.statementDate,
-          parseResult.year,
-          parseResult.month,
-          parseResult.closingBalance,
-          parseResult.occupancy.ownerNights,
-          parseResult.occupancy.guestNights,
-          parseResult.occupancy.rentalNights,
-          parseResult.occupancy.vacantNights,
-          parseResult.rentalRevenue,
-          parseResult.ownerRevenueShare,
-          { text: parseResult.rawText, expenses: parseResult.expenses, utilities: parseResult.utilities }
-        ]);
-        
-        const statementId = statementResult.rows[0].id;
-        
-        await pool.query('DELETE FROM expense_categories WHERE statement_id = $1', [statementId]);
-        
-        for (const expense of parseResult.expenses) {
-          await pool.query(
-            'INSERT INTO expense_categories (statement_id, category, subcategory, amount) VALUES ($1, $2, $3, $4)',
-            [statementId, expense.category, expense.subcategory, expense.amount]
-          );
-        }
-        
-        await pool.query('DELETE FROM utility_readings WHERE statement_id = $1', [statementId]);
-        
-        for (const utility of parseResult.utilities) {
-          await pool.query(
-            'INSERT INTO utility_readings (statement_id, utility_type, consumption, cost, unit) VALUES ($1, $2, $3, $4, $5)',
-            [statementId, utility.type, utility.consumption, utility.cost, utility.unit]
-          );
-        }
+    .login-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    
+    .login-box {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
+      padding: 40px;
+      width: 100%;
+      max-width: 400px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    
+    .login-box h1 {
+      text-align: center;
+      margin-bottom: 10px;
+      font-size: 28px;
+    }
+    
+    .login-box .subtitle {
+      text-align: center;
+      color: rgba(255, 255, 255, 0.6);
+      margin-bottom: 30px;
+    }
+    
+    .form-group {
+      margin-bottom: 20px;
+    }
+    
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      color: rgba(255, 255, 255, 0.8);
+    }
+    
+    .form-group input {
+      width: 100%;
+      padding: 12px 16px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      font-size: 16px;
+    }
+    
+    .form-group input:focus {
+      outline: none;
+      border-color: #4ecdc4;
+    }
+    
+    .btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #4ecdc4, #44a08d);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(78, 205, 196, 0.3);
+    }
+    
+    .error-msg {
+      color: #ff6b6b;
+      text-align: center;
+      margin-top: 15px;
+    }
+    
+    /* Dashboard Styles */
+    .dashboard {
+      display: none;
+      padding: 20px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+      flex-wrap: wrap;
+      gap: 15px;
+    }
+    
+    .header h1 {
+      font-size: 28px;
+    }
+    
+    .header-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    
+    .upload-btn {
+      padding: 10px 20px;
+      background: linear-gradient(135deg, #4ecdc4, #44a08d);
+      border: none;
+      border-radius: 10px;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    
+    .logout-btn {
+      padding: 10px 20px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 10px;
+      color: #fff;
+      cursor: pointer;
+    }
+    
+    /* KPI Cards */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+    
+    .kpi-card {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 15px;
+      padding: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .kpi-card .label {
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+    
+    .kpi-card .value {
+      font-size: 28px;
+      font-weight: 700;
+      color: #4ecdc4;
+    }
+    
+    .kpi-card .subtext {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.5);
+      margin-top: 5px;
+    }
+    
+    /* Charts Section */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+    
+    .chart-card {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 15px;
+      padding: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .chart-card h3 {
+      margin-bottom: 15px;
+      font-size: 18px;
+    }
+    
+    /* Expense Breakdown */
+    .expense-breakdown {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 15px;
+      padding: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      margin-bottom: 30px;
+    }
+    
+    .expense-breakdown h3 {
+      margin-bottom: 20px;
+    }
+    
+    .expense-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .expense-item:last-child {
+      border-bottom: none;
+    }
+    
+    .expense-item .name {
+      color: rgba(255, 255, 255, 0.8);
+    }
+    
+    .expense-item .amount {
+      font-weight: 600;
+      color: #4ecdc4;
+    }
+    
+    .expense-bar {
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      margin-top: 8px;
+      overflow: hidden;
+    }
+    
+    .expense-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #4ecdc4, #44a08d);
+      border-radius: 3px;
+    }
+    
+    /* Statements List */
+    .statements-list {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 15px;
+      padding: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .statements-list h3 {
+      margin-bottom: 15px;
+    }
+    
+    .statement-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      margin-bottom: 8px;
+    }
+    
+    .statement-item .info {
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .statement-item .month {
+      font-weight: 600;
+    }
+    
+    .statement-item .filename {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.5);
+    }
+    
+    .statement-item .delete-btn {
+      padding: 6px 12px;
+      background: rgba(255, 107, 107, 0.2);
+      border: none;
+      border-radius: 6px;
+      color: #ff6b6b;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    
+    /* File Input */
+    .file-input {
+      display: none;
+    }
+    
+    /* Loading */
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: rgba(255, 255, 255, 0.6);
+    }
+    
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: rgba(255, 255, 255, 0.5);
+    }
+    
+    .empty-state h3 {
+      margin-bottom: 10px;
+      color: rgba(255, 255, 255, 0.7);
+    }
+    
+    @media (max-width: 600px) {
+      .charts-grid {
+        grid-template-columns: 1fr;
       }
-    } else if (fileType === 'folio') {
-      parseResult = await parseHotelFolio(buffer, originalname);
       
-      const folioResult = await pool.query(`
-        INSERT INTO hotel_folios (folio_date, guest_name, total_charges, raw_data)
-        VALUES (CURRENT_DATE, $1, $2, $3)
-        RETURNING id
-      `, [parseResult.guestName, parseResult.totalCharges, { text: parseResult.rawText }]);
-      
-      const folioId = folioResult.rows[0].id;
-      
-      for (const item of parseResult.lineItems) {
-        await pool.query(
-          'INSERT INTO folio_line_items (folio_id, description, category, amount) VALUES ($1, $2, $3, $4)',
-          [folioId, item.description, item.category, item.amount]
-        );
+      .header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Login Screen -->
+  <div class="login-container" id="loginScreen">
+    <div class="login-box">
+      <h1>🏝️ Villa 08</h1>
+      <p class="subtitle">Amanyara Financial Dashboard</p>
+      <form id="loginForm">
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="username" required>
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="password" required>
+        </div>
+        <button type="submit" class="btn">Sign In</button>
+        <p class="error-msg" id="loginError"></p>
+      </form>
+    </div>
+  </div>
+  
+  <!-- Dashboard -->
+  <div class="dashboard" id="dashboard">
+    <div class="header">
+      <h1>🏝️ Villa 08 Dashboard</h1>
+      <div class="header-actions">
+        <input type="file" id="fileInput" class="file-input" accept=".pdf">
+        <button class="upload-btn" onclick="document.getElementById('fileInput').click()">📄 Upload Statement</button>
+        <button class="logout-btn" onclick="logout()">Logout</button>
+      </div>
+    </div>
+    
+    <!-- KPI Cards -->
+    <div class="kpi-grid" id="kpiGrid">
+      <div class="kpi-card">
+        <div class="label">Current Balance</div>
+        <div class="value" id="kpiBalance">$0.00</div>
+        <div class="subtext" id="kpiBalanceDate">-</div>
+      </div>
+      <div class="kpi-card">
+        <div class="label">YTD Expenses</div>
+        <div class="value" id="kpiExpenses">$0.00</div>
+        <div class="subtext">Total operating costs</div>
+      </div>
+      <div class="kpi-card">
+        <div class="label">YTD Revenue Share</div>
+        <div class="value" id="kpiRevenue">$0.00</div>
+        <div class="subtext">50% owner share</div>
+      </div>
+      <div class="kpi-card">
+        <div class="label">Occupancy (Latest Month)</div>
+        <div class="value" id="kpiOccupancy">0%</div>
+        <div class="subtext" id="kpiOccupancyDetail">-</div>
+      </div>
+    </div>
+    
+    <!-- Charts -->
+    <div class="charts-grid">
+      <div class="chart-card">
+        <h3>Monthly Expenses</h3>
+        <canvas id="expensesChart"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3>Occupancy Breakdown</h3>
+        <canvas id="occupancyChart"></canvas>
+      </div>
+    </div>
+    
+    <!-- Expense Breakdown -->
+    <div class="expense-breakdown">
+      <h3>Expense Breakdown (Latest Month)</h3>
+      <div id="expenseList"></div>
+    </div>
+    
+    <!-- Statements List -->
+    <div class="statements-list">
+      <h3>Uploaded Statements</h3>
+      <div id="statementsList"></div>
+    </div>
+  </div>
+  
+  <script>
+    let statements = [];
+    let expensesChart = null;
+    let occupancyChart = null;
+    
+    // Check auth on load
+    async function checkAuth() {
+      try {
+        const res = await fetch('/api/auth/status');
+        const data = await res.json();
+        if (data.authenticated) {
+          showDashboard();
+          loadStatements();
+        }
+      } catch (err) {
+        console.error('Auth check failed:', err);
       }
     }
     
-    await pool.query('UPDATE uploaded_files SET processed = true WHERE id = $1', [uploadId]);
-    
-    res.json({ success: true, parsed: parseResult });
-  } catch (err) {
-    console.error('Upload processing error:', err);
-    res.status(500).json({ error: 'Failed to process file', details: err.message });
-  }
-});
-
-// Get dashboard data
-app.get('/api/dashboard', requireAuth, async (req, res) => {
-  try {
-    const statements = await pool.query(`
-      SELECT * FROM monthly_statements 
-      ORDER BY year DESC, month DESC
-    `);
-    
-    let expenses = [];
-    let utilities = [];
-    if (statements.rows.length > 0) {
-      const latestId = statements.rows[0].id;
+    // Login
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
       
-      const expenseResult = await pool.query(`
-        SELECT category, subcategory, SUM(amount) as total
-        FROM expense_categories 
-        WHERE statement_id = $1
-        GROUP BY category, subcategory
-        ORDER BY total DESC
-      `, [latestId]);
-      expenses = expenseResult.rows;
-      
-      const utilityResult = await pool.query(`
-        SELECT * FROM utility_readings WHERE statement_id = $1
-      `, [latestId]);
-      utilities = utilityResult.rows;
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        
+        const data = await res.json();
+        if (data.success) {
+          showDashboard();
+          loadStatements();
+        } else {
+          document.getElementById('loginError').textContent = data.error || 'Login failed';
+        }
+      } catch (err) {
+        document.getElementById('loginError').textContent = 'Login failed';
+      }
+    });
+    
+    // Logout
+    async function logout() {
+      await fetch('/api/logout', { method: 'POST' });
+      document.getElementById('loginScreen').style.display = 'flex';
+      document.getElementById('dashboard').style.display = 'none';
     }
     
-    const currentYear = new Date().getFullYear();
-    const ytdResult = await pool.query(`
-      SELECT 
-        SUM(closing_balance) as total_balance,
-        SUM(owner_nights) as total_owner_nights,
-        SUM(guest_nights) as total_guest_nights,
-        SUM(rental_nights) as total_rental_nights,
-        SUM(vacant_nights) as total_vacant_nights,
-        SUM(rental_revenue) as total_rental_revenue,
-        SUM(owner_revenue_share) as total_owner_revenue
-      FROM monthly_statements
-      WHERE year = $1
-    `, [currentYear]);
+    function showDashboard() {
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+    }
     
-    const trendResult = await pool.query(`
-      SELECT 
-        ms.year, ms.month,
-        SUM(ec.amount) as total_expenses
-      FROM monthly_statements ms
-      LEFT JOIN expense_categories ec ON ms.id = ec.statement_id
-      WHERE ms.year >= $1 - 1
-      GROUP BY ms.year, ms.month
-      ORDER BY ms.year, ms.month
-    `, [currentYear]);
+    // Load statements
+    async function loadStatements() {
+      try {
+        const res = await fetch('/api/statements');
+        statements = await res.json();
+        renderDashboard();
+      } catch (err) {
+        console.error('Failed to load statements:', err);
+      }
+    }
     
-    const filesResult = await pool.query(`
-      SELECT * FROM uploaded_files ORDER BY upload_date DESC LIMIT 20
-    `);
-    
-    res.json({
-      statements: statements.rows,
-      latestExpenses: expenses,
-      latestUtilities: utilities,
-      ytdSummary: ytdResult.rows[0],
-      expenseTrends: trendResult.rows,
-      recentFiles: filesResult.rows
-    });
-  } catch (err) {
-    console.error('Dashboard data error:', err);
-    res.status(500).json({ error: 'Failed to fetch dashboard data' });
-  }
-});
-
-// Chat with AI
-app.post('/api/chat', requireAuth, async (req, res) => {
-  const { message } = req.body;
-  
-  if (!anthropic) {
-    return res.status(503).json({ error: 'AI chat not configured. Please set ANTHROPIC_API_KEY.' });
-  }
-  
-  try {
-    await pool.query(
-      'INSERT INTO chat_messages (user_id, role, content) VALUES ($1, $2, $3)',
-      [req.session.userId, 'user', message]
-    );
-    
-    const statements = await pool.query(`
-      SELECT year, month, closing_balance, owner_nights, guest_nights, rental_nights, 
-             vacant_nights, rental_revenue, owner_revenue_share
-      FROM monthly_statements 
-      ORDER BY year DESC, month DESC 
-      LIMIT 12
-    `);
-    
-    const expenses = await pool.query(`
-      SELECT ec.category, ec.subcategory, ec.amount, ms.year, ms.month
-      FROM expense_categories ec
-      JOIN monthly_statements ms ON ec.statement_id = ms.id
-      ORDER BY ms.year DESC, ms.month DESC
-      LIMIT 50
-    `);
-    
-    const systemPrompt = 'You are a helpful financial assistant for Villa 8 at Amanyara Resort in Turks & Caicos. ' +
-      'You have access to the villa financial data including monthly statements, expenses, occupancy, and utility usage.\n\n' +
-      'Here is the recent financial data:\n\nMonthly Statements (most recent 12 months):\n' +
-      JSON.stringify(statements.rows, null, 2) + '\n\nRecent Expenses:\n' +
-      JSON.stringify(expenses.rows, null, 2) + '\n\n' +
-      'Help the owner understand their villa expenses, occupancy patterns, and financial performance. ' +
-      'Provide specific numbers when available. Be concise but thorough.';
-    
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: message }]
+    // File upload
+    document.getElementById('fileInput').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+        
+        const data = await res.json();
+        if (data.success) {
+          loadStatements();
+        } else {
+          alert('Upload failed: ' + (data.error || 'Unknown error'));
+        }
+      } catch (err) {
+        alert('Upload failed: ' + err.message);
+      }
+      
+      e.target.value = '';
     });
     
-    const assistantMessage = response.content[0].text;
+    // Delete statement
+    async function deleteStatement(id) {
+      if (!confirm('Delete this statement?')) return;
+      
+      try {
+        await fetch('/api/statements/' + id, { method: 'DELETE' });
+        loadStatements();
+      } catch (err) {
+        alert('Delete failed');
+      }
+    }
     
-    await pool.query(
-      'INSERT INTO chat_messages (user_id, role, content) VALUES ($1, $2, $3)',
-      [req.session.userId, 'assistant', assistantMessage]
-    );
+    // Render dashboard
+    function renderDashboard() {
+      if (statements.length === 0) {
+        document.getElementById('expenseList').innerHTML = '<div class="empty-state"><h3>No statements uploaded</h3><p>Upload your first Amanyara monthly statement to get started.</p></div>';
+        document.getElementById('statementsList').innerHTML = '<div class="empty-state"><p>No statements yet</p></div>';
+        return;
+      }
+      
+      // Sort by date
+      statements.sort((a, b) => {
+        if (a.year !== b.year) return b.year - a.year;
+        return b.month - a.month;
+      });
+      
+      const latest = statements[0];
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      
+      // KPIs
+      document.getElementById('kpiBalance').textContent = formatCurrency(latest.closing_balance);
+      document.getElementById('kpiBalanceDate').textContent = monthNames[latest.month - 1] + ' ' + latest.year;
+      
+      // YTD totals
+      const ytdExpenses = statements
+        .filter(s => s.year === latest.year)
+        .reduce((sum, s) => sum + parseFloat(s.total_expenses || 0), 0);
+      document.getElementById('kpiExpenses').textContent = formatCurrency(ytdExpenses);
+      
+      document.getElementById('kpiRevenue').textContent = formatCurrency(latest.owner_revenue_share);
+      
+      // Occupancy
+      const occ = latest.occupancy || {};
+      const totalNights = (occ.ownerNights || 0) + (occ.guestNights || 0) + (occ.rentalNights || 0) + (occ.vacantNights || 0);
+      const occupiedNights = (occ.ownerNights || 0) + (occ.guestNights || 0) + (occ.rentalNights || 0);
+      const occupancyPct = totalNights > 0 ? Math.round((occupiedNights / totalNights) * 100) : 0;
+      document.getElementById('kpiOccupancy').textContent = occupancyPct + '%';
+      document.getElementById('kpiOccupancyDetail').textContent = 
+        'Owner: ' + (occ.ownerNights || 0) + ' | Guest: ' + (occ.guestNights || 0) + 
+        ' | Rental: ' + (occ.rentalNights || 0) + ' | Vacant: ' + (occ.vacantNights || 0);
+      
+      // Expense breakdown
+      renderExpenseBreakdown(latest.expenses || []);
+      
+      // Statements list
+      renderStatementsList();
+      
+      // Charts
+      renderCharts();
+    }
     
-    res.json({ response: assistantMessage });
-  } catch (err) {
-    console.error('Chat error:', err);
-    res.status(500).json({ error: 'Failed to process chat message' });
-  }
-});
+    function renderExpenseBreakdown(expenses) {
+      const container = document.getElementById('expenseList');
+      
+      if (!expenses || expenses.length === 0) {
+        container.innerHTML = '<p style="color: rgba(255,255,255,0.5)">No expense data available</p>';
+        return;
+      }
+      
+      // Group by category
+      const byCategory = {};
+      expenses.forEach(e => {
+        if (!byCategory[e.category]) byCategory[e.category] = [];
+        byCategory[e.category].push(e);
+      });
+      
+      const maxAmount = Math.max(...expenses.map(e => e.amount));
+      
+      let html = '';
+      Object.entries(byCategory).forEach(([category, items]) => {
+        const total = items.reduce((sum, i) => sum + i.amount, 0);
+        html += '<div style="margin-bottom: 20px;">';
+        html += '<div style="font-weight: 600; margin-bottom: 10px; color: #4ecdc4;">' + category + ' - ' + formatCurrency(total) + '</div>';
+        
+        items.forEach(item => {
+          const pct = (item.amount / maxAmount) * 100;
+          html += '<div class="expense-item">';
+          html += '<span class="name">' + item.subcategory + '</span>';
+          html += '<span class="amount">' + formatCurrency(item.amount) + '</span>';
+          html += '</div>';
+          html += '<div class="expense-bar"><div class="expense-bar-fill" style="width: ' + pct + '%"></div></div>';
+        });
+        
+        html += '</div>';
+      });
+      
+      container.innerHTML = html;
+    }
+    
+    function renderStatementsList() {
+      const container = document.getElementById('statementsList');
+      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                          'July', 'August', 'September', 'October', 'November', 'December'];
+      
+      let html = '';
+      statements.forEach(s => {
+        html += '<div class="statement-item">';
+        html += '<div class="info">';
+        html += '<span class="month">' + monthNames[s.month - 1] + ' ' + s.year + '</span>';
+        html += '<span class="filename">' + (s.filename || 'Unknown file') + '</span>';
+        html += '</div>';
+        html += '<div>';
+        html += '<span style="margin-right: 15px; color: #4ecdc4;">' + formatCurrency(s.total_expenses) + '</span>';
+        html += '<button class="delete-btn" onclick="deleteStatement(' + s.id + ')">Delete</button>';
+        html += '</div>';
+        html += '</div>';
+      });
+      
+      container.innerHTML = html;
+    }
+    
+    function renderCharts() {
+      // Expenses chart
+      const ctx1 = document.getElementById('expensesChart').getContext('2d');
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      
+      // Sort by date for chart
+      const sorted = [...statements].sort((a, b) => {
+        if (a.year !== b.year) return a.year - b.year;
+        return a.month - b.month;
+      });
+      
+      const labels = sorted.map(s => monthNames[s.month - 1] + ' ' + (s.year % 100));
+      const expenseData = sorted.map(s => parseFloat(s.total_expenses) || 0);
+      
+      if (expensesChart) expensesChart.destroy();
+      expensesChart = new Chart(ctx1, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Monthly Expenses',
+            data: expenseData,
+            backgroundColor: 'rgba(78, 205, 196, 0.6)',
+            borderColor: '#4ecdc4',
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { color: 'rgba(255,255,255,0.6)' },
+              grid: { color: 'rgba(255,255,255,0.1)' }
+            },
+            x: {
+              ticks: { color: 'rgba(255,255,255,0.6)' },
+              grid: { display: false }
+            }
+          }
+        }
+      });
+      
+      // Occupancy chart (latest month)
+      const ctx2 = document.getElementById('occupancyChart').getContext('2d');
+      const latest = statements[0];
+      const occ = latest?.occupancy || {};
+      
+      if (occupancyChart) occupancyChart.destroy();
+      occupancyChart = new Chart(ctx2, {
+        type: 'doughnut',
+        data: {
+          labels: ['Owner', 'Guest', 'Rental', 'Vacant'],
+          datasets: [{
+            data: [occ.ownerNights || 0, occ.guestNights || 0, occ.rentalNights || 0, occ.vacantNights || 0],
+            backgroundColor: ['#4ecdc4', '#44a08d', '#f39c12', '#7f8c8d'],
+            borderWidth: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { color: 'rgba(255,255,255,0.8)' }
+            }
+          }
+        }
+      });
+    }
+    
+    function formatCurrency(value) {
+      const num = parseFloat(value) || 0;
+      return '$' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    
+    // Init
+    checkAuth();
+  </script>
+</body>
+</html>
+`;
 
-// Get chat history
-app.get('/api/chat/history', requireAuth, async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT role, content, created_at FROM chat_messages WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50',
-      [req.session.userId]
-    );
-    res.json(result.rows.reverse());
-  } catch (err) {
-    console.error('Chat history error:', err);
-    res.status(500).json({ error: 'Failed to fetch chat history' });
-  }
-});
-
-// Serve index.html for all other routes
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// Serve dashboard
+app.get('/', (req, res) => {
+  res.send(dashboardHTML);
 });
 
 // Start server
-initDatabase().then(() => {
+initDB().then(() => {
   app.listen(PORT, () => {
     console.log('Villa Dashboard running on port ' + PORT);
   });
