@@ -388,6 +388,7 @@ const dashboardHTML = `<!DOCTYPE html>
       const s=statements[0],mn=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],fmn=['January','February','March','April','May','June','July','August','September','October','November','December'];
       const occ=s.occupancy||{},md=s.monthly_data||{},exp=s.expenses||{};
       const mo=md.occupancy||{},me=md.expenses||{},rev=md.revenue||{};
+      const monthStr=String(selMonth); // JSON keys are strings
       
       // Calculate values based on view mode
       let od,expVal,adrVal,viewLabel,monthsCount;
@@ -405,15 +406,16 @@ const dashboardHTML = `<!DOCTYPE html>
         expVal=0;
         let totalRevenue=0,rentalNights=0;
         for(let m=1;m<=12;m++){
-          const mOcc=mo[m]||{};
+          const mStr=String(m);
+          const mOcc=mo[mStr]||mo[m]||{};
           od.ownerNights+=(mOcc.ownerNights||0);
           od.guestNights+=(mOcc.guestNights||0);
           od.complimentaryNights+=(mOcc.complimentaryNights||0);
           od.rentalNights+=(mOcc.rentalNights||0);
           od.vacantNights+=(mOcc.vacantNights||0);
           od.oooNights+=(mOcc.oooNights||0);
-          expVal+=(me[m]?.total||0);
-          totalRevenue+=(rev[m]?.grossRevenue||0);
+          expVal+=((me[mStr]||me[m])?.total||0);
+          totalRevenue+=((rev[mStr]||rev[m])?.grossRevenue||0);
           rentalNights+=(mOcc.rentalNights||0);
         }
         adrVal=rentalNights>0?(totalRevenue/rentalNights):0;
@@ -421,9 +423,9 @@ const dashboardHTML = `<!DOCTYPE html>
         monthsCount=12;
       } else {
         // Single month view
-        od=mo[selMonth]||occ.current||{};
-        expVal=me[selMonth]?.total||(selMonth===s.month?s.total_expenses:0);
-        adrVal=rev[selMonth]?.adr||md.adr||0;
+        od=mo[monthStr]||mo[selMonth]||occ.current||{};
+        expVal=(me[monthStr]||me[selMonth])?.total||(selMonth===s.month?s.total_expenses:0);
+        adrVal=(rev[monthStr]||rev[selMonth])?.adr||md.adr||0;
         viewLabel=fmn[selMonth-1];
         monthsCount=1;
       }
@@ -465,6 +467,7 @@ const dashboardHTML = `<!DOCTYPE html>
       const cats=exp.categories||{};
       const cn={generalServices:'General Services',maintenance:'Maintenance',sharedExpenses:'Shared Expenses',utilities:'Utilities'};
       let h='';
+      const monthStr=String(month); // JSON keys are strings
       
       for(const[k,d]of Object.entries(cats)){
         if(k==='adminFee')continue;
@@ -474,9 +477,9 @@ const dashboardHTML = `<!DOCTYPE html>
         if(vMode==='ytd'){
           catTotal=d.ytd||0;
         }else if(vMode==='t12'){
-          catTotal=d.items?.reduce((sum,i)=>{let t=0;for(let m=1;m<=12;m++)t+=(i.monthly?.[m]||0);return sum+t;},0)||0;
+          catTotal=d.items?.reduce((sum,i)=>{let t=0;for(let m=1;m<=12;m++)t+=(i.monthly?.[String(m)]||i.monthly?.[m]||0);return sum+t;},0)||0;
         }else{
-          catTotal=d.items?.reduce((sum,i)=>(sum+(i.monthly?.[month]||0)),0)||0;
+          catTotal=d.items?.reduce((sum,i)=>(sum+(i.monthly?.[monthStr]||i.monthly?.[month]||0)),0)||0;
         }
         
         const avgPerMonth=d.ytd?(d.ytd/12).toFixed(2):0;
@@ -488,9 +491,9 @@ const dashboardHTML = `<!DOCTYPE html>
             if(vMode==='ytd'){
               itemVal=i.ytd||0;
             }else if(vMode==='t12'){
-              for(let m=1;m<=12;m++)itemVal+=(i.monthly?.[m]||0);
+              for(let m=1;m<=12;m++)itemVal+=(i.monthly?.[String(m)]||i.monthly?.[m]||0);
             }else{
-              itemVal=i.monthly?.[month]||0;
+              itemVal=i.monthly?.[monthStr]||i.monthly?.[month]||0;
             }
             
             const avg=i.ytd?(i.ytd/12):0;
@@ -525,7 +528,7 @@ const dashboardHTML = `<!DOCTYPE html>
           const avg=i.ytd?(i.ytd/12):0;
           if(avg<=0)continue;
           for(let m=1;m<=12;m++){
-            const mv=i.monthly[m]||0;
+            const mv=i.monthly[String(m)]||i.monthly[m]||0;
             if(mv>(avg*1.5)&&mv>100){
               anomalies.push({name:i.name,month:fmn[m-1],amount:mv,avg:avg,pct:Math.round((mv/avg-1)*100)});
             }
@@ -549,11 +552,21 @@ const dashboardHTML = `<!DOCTYPE html>
     
     function renderCharts(s,md){
       const mn=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-      const em=md.expenses||{},ed=[];for(let m=1;m<=12;m++)ed.push(em[m]?.total||0);
+      const em=md.expenses||{},ed=[];
+      for(let m=1;m<=12;m++){
+        const mData=em[String(m)]||em[m]||{};
+        ed.push(mData.total||0);
+      }
       if(expChart)expChart.destroy();
-      expChart=new Chart(document.getElementById('expChart'),{type:'bar',data:{labels:mn,datasets:[{label:'Expenses',data:ed,backgroundColor:ed.map((v,i)=>i+1===selMonth?'rgba(78,205,196,1)':'rgba(78,205,196,0.4)'),borderColor:'#4ecdc4',borderWidth:1}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{color:'rgba(255,255,255,0.6)'},grid:{color:'rgba(255,255,255,0.1)'}},x:{ticks:{color:'rgba(255,255,255,0.6)'},grid:{display:false}}}}});
+      expChart=new Chart(document.getElementById('expChart'),{type:'bar',data:{labels:mn,datasets:[{label:'Expenses',data:ed,backgroundColor:ed.map((v,i)=>i+1===selMonth&&viewMode==='month'?'rgba(78,205,196,1)':'rgba(78,205,196,0.4)'),borderColor:'#4ecdc4',borderWidth:1}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{color:'rgba(255,255,255,0.6)'},grid:{color:'rgba(255,255,255,0.1)'}},x:{ticks:{color:'rgba(255,255,255,0.6)'},grid:{display:false}}}}});
       const om=md.occupancy||{},od=[],gd=[],rd=[],vd=[];
-      for(let m=1;m<=12;m++){const mo=om[m]||{};od.push(mo.ownerNights||0);gd.push(mo.guestNights||0);rd.push(mo.rentalNights||0);vd.push(mo.vacantNights||0);}
+      for(let m=1;m<=12;m++){
+        const moData=om[String(m)]||om[m]||{};
+        od.push(moData.ownerNights||0);
+        gd.push(moData.guestNights||0);
+        rd.push(moData.rentalNights||0);
+        vd.push(moData.vacantNights||0);
+      }
       if(occChart)occChart.destroy();
       occChart=new Chart(document.getElementById('occChart'),{type:'bar',data:{labels:mn,datasets:[{label:'Owner',data:od,backgroundColor:'#3498db'},{label:'Guest',data:gd,backgroundColor:'#9b59b6'},{label:'Rental',data:rd,backgroundColor:'#2ecc71'},{label:'Vacant',data:vd,backgroundColor:'#95a5a6'}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{color:'rgba(255,255,255,0.8)',boxWidth:12}}},scales:{x:{stacked:true,ticks:{color:'rgba(255,255,255,0.6)'}},y:{stacked:true,ticks:{color:'rgba(255,255,255,0.6)'},grid:{color:'rgba(255,255,255,0.1)'}}}}});
     }
