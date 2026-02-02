@@ -11,6 +11,8 @@
     :root { --primary: #1a3a4a; --primary-light: #2d5a6e; --accent: #c9a962; --text: #1a1a1a; --text-light: #666; --card-bg: rgba(255,255,255,0.85); --glass-border: rgba(255,255,255,0.3); --shadow: 0 8px 32px rgba(0,0,0,0.1); }
     body { font-family: 'Montserrat', sans-serif; background: linear-gradient(135deg, #e8e4dc 0%, #d4cfc4 50%, #c9c4b8 100%); min-height: 100vh; color: var(--text); }
     h1,h2,h3 { font-family: 'Cormorant Garamond', serif; font-weight: 400; }
+    
+    /* Login Styles */
     .login-container { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem; }
     .login-card { background: var(--card-bg); backdrop-filter: blur(20px); border-radius: 24px; padding: 3rem; width: 100%; max-width: 420px; box-shadow: var(--shadow); }
     .login-logo { text-align: center; margin-bottom: 2rem; }
@@ -18,89 +20,678 @@
     .login-logo span { font-size: 0.85rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.3em; }
     .form-group { margin-bottom: 1.5rem; }
     .form-group label { display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-light); margin-bottom: 0.5rem; }
-    .form-group input, .form-group select { width: 100%; padding: 1rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 12px; font-family: inherit; font-size: 1rem; }
+    .form-group input, .form-group select { width: 100%; padding: 1rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 12px; font-family: inherit; font-size: 1rem; background: white; }
     .form-group input:focus { outline: none; border-color: var(--accent); }
     .btn { padding: 1rem 2rem; border: none; border-radius: 12px; font-family: inherit; font-size: 0.9rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.15em; cursor: pointer; transition: all 0.3s; }
     .btn-primary { background: var(--primary); color: white; width: 100%; }
     .btn-primary:hover { background: var(--primary-light); }
-    .error-message { background: #fee; color: #c00; padding: 0.75rem; border-radius: 8px; margin-bottom: 1rem; display: none; }
+    .btn-secondary { background: transparent; border: 1px solid var(--primary); color: var(--primary); }
+    .error-message { background: #fee; color: #c00; padding: 0.75rem; border-radius: 8px; margin-bottom: 1rem; display: none; font-size: 0.9rem; }
+    
+    /* Dashboard Layout */
     .dashboard { display: none; min-height: 100vh; }
     .dashboard.active { display: block; }
     .login-container.hidden { display: none; }
-    .header { background: var(--card-bg); backdrop-filter: blur(20px); padding: 1rem 2rem; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+    
+    /* Header */
+    .header { background: var(--card-bg); backdrop-filter: blur(20px); padding: 1rem 2rem; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; box-shadow: var(--shadow); }
     .header-brand { display: flex; align-items: center; gap: 1rem; }
     .header-brand h1 { font-size: 1.5rem; color: var(--primary); }
     .header-brand span { font-size: 0.7rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.2em; background: rgba(201,169,98,0.15); padding: 0.35rem 0.75rem; border-radius: 4px; }
-    .header-btn { padding: 0.5rem 1rem; border: 1px solid var(--glass-border); border-radius: 8px; background: transparent; font-family: inherit; font-size: 0.8rem; cursor: pointer; margin-left: 0.5rem; }
+    .header-actions { display: flex; align-items: center; gap: 0.5rem; }
+    .header-btn { padding: 0.5rem 1rem; border: 1px solid var(--glass-border); border-radius: 8px; background: transparent; font-family: inherit; font-size: 0.8rem; cursor: pointer; transition: all 0.3s; }
     .header-btn:hover { background: var(--primary); color: white; }
+    
+    /* Main Content */
     .main-content { padding: 2rem; max-width: 1600px; margin: 0 auto; }
-    .statement-selector { background: var(--card-bg); border-radius: 16px; padding: 1.25rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem; box-shadow: var(--shadow); }
+    
+    /* Statement Selector */
+    .statement-selector { background: var(--card-bg); border-radius: 16px; padding: 1.25rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem; box-shadow: var(--shadow); flex-wrap: wrap; }
     .statement-selector label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-light); }
-    .statement-selector select { flex: 1; max-width: 300px; padding: 0.75rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; font-family: inherit; }
+    .statement-selector select { flex: 1; max-width: 300px; padding: 0.75rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; font-family: inherit; background: white; }
     .statement-count { font-size: 0.8rem; color: var(--text-light); margin-left: auto; }
+    
+    /* Tabs */
     .tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; background: var(--card-bg); border-radius: 12px; padding: 0.5rem; box-shadow: var(--shadow); flex-wrap: wrap; }
-    .tab-btn { padding: 0.75rem 1.25rem; border: none; border-radius: 8px; font-family: inherit; font-size: 0.8rem; font-weight: 500; color: var(--text-light); background: transparent; cursor: pointer; }
+    .tab-btn { padding: 0.75rem 1.25rem; border: none; border-radius: 8px; font-family: inherit; font-size: 0.8rem; font-weight: 500; color: var(--text-light); background: transparent; cursor: pointer; transition: all 0.3s; }
     .tab-btn:hover { color: var(--primary); }
     .tab-btn.active { background: var(--primary); color: white; }
     .tab-content { display: none; }
     .tab-content.active { display: block; }
-    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+    
+    /* KPI Cards */
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
     .kpi-card { background: var(--card-bg); border-radius: 20px; padding: 1.5rem; box-shadow: var(--shadow); }
     .kpi-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-light); margin-bottom: 0.5rem; }
     .kpi-value { font-family: 'Cormorant Garamond', serif; font-size: 2.25rem; font-weight: 500; color: var(--primary); }
     .kpi-value.accent { color: var(--accent); }
+    .kpi-value.negative { color: #c75050; }
     .kpi-change { font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem; }
+    
+    /* Charts */
     .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
     .chart-card { background: var(--card-bg); border-radius: 20px; padding: 1.5rem; box-shadow: var(--shadow); }
     .chart-card h3 { font-size: 1.1rem; color: var(--primary); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(0,0,0,0.05); }
     .chart-container { position: relative; height: 280px; }
-    .occupancy-calendar { background: var(--card-bg); border-radius: 20px; padding: 1.5rem; box-shadow: var(--shadow); margin-bottom: 1.5rem; }
-    .occupancy-calendar h3 { font-size: 1.1rem; color: var(--primary); margin-bottom: 1rem; }
-    .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-    .calendar-header { font-size: 0.7rem; text-transform: uppercase; color: var(--text-light); text-align: center; padding: 0.5rem; }
-    .calendar-day { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border-radius: 8px; font-size: 0.8rem; font-weight: 500; }
-    .calendar-day.empty { background: transparent; }
-    .calendar-day.owner { background: #2d5a6e; color: white; }
-    .calendar-day.guest { background: #c9a962; color: white; }
-    .calendar-day.rental { background: #4a9e6e; color: white; }
-    .calendar-day.vacant { background: #f0ede8; color: var(--text-light); }
-    .calendar-legend { display: flex; gap: 1.5rem; margin-top: 1rem; flex-wrap: wrap; }
+    
+    /* Occupancy Calendar */
+    .occupancy-section { background: var(--card-bg); border-radius: 20px; padding: 1.5rem; box-shadow: var(--shadow); margin-bottom: 1.5rem; }
+    .occupancy-section h3 { font-size: 1.1rem; color: var(--primary); margin-bottom: 1rem; }
+    .occupancy-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .occ-stat { text-align: center; padding: 1rem; background: rgba(0,0,0,0.02); border-radius: 12px; }
+    .occ-stat-value { font-size: 1.75rem; font-family: 'Cormorant Garamond', serif; font-weight: 600; }
+    .occ-stat-value.owner { color: #2d5a6e; }
+    .occ-stat-value.guest { color: #c9a962; }
+    .occ-stat-value.rental { color: #4a9e6e; }
+    .occ-stat-value.vacant { color: #999; }
+    .occ-stat-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-light); margin-top: 0.25rem; }
+    .calendar-legend { display: flex; gap: 1.5rem; margin-top: 1rem; flex-wrap: wrap; justify-content: center; }
     .legend-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; }
     .legend-color { width: 16px; height: 16px; border-radius: 4px; }
-    .occupancy-timeline { margin-top: 1.5rem; }
-    .timeline-item { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 0; border-bottom: 1px solid rgba(0,0,0,0.05); }
-    .timeline-type { width: 80px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
-    .timeline-type.owner { color: #2d5a6e; }
-    .timeline-type.guest { color: #c9a962; }
-    .timeline-type.rental { color: #4a9e6e; }
-    .timeline-type.vacant { color: var(--text-light); }
-    .timeline-dates { flex: 1; font-size: 0.85rem; }
-    .timeline-nights { font-weight: 600; color: var(--primary); }
-    .expense-breakdown { display: grid; grid-template-columns: 320px 1fr; gap: 1.5rem; }
-    @media (max-width: 900px) { .expense-breakdown { grid-template-columns: 1fr; } .charts-grid { grid-template-columns: 1fr; } }
-    .expense-categories { background: var(--card-bg); border-radius: 20px; padding: 1.5rem; box-shadow: var(--shadow); }
-    .expense-categories h3 { font-size: 1.1rem; color: var(--primary); margin-bottom: 1rem; }
-    .category-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid rgba(0,0,0,0.05); cursor: pointer; }
-    .category-item:hover { background: rgba(201,169,98,0.05); margin: 0 -1rem; padding: 0.75rem 1rem; }
-    .category-item.active { background: rgba(201,169,98,0.1); margin: 0 -1rem; padding: 0.75rem 1rem; border-radius: 8px; }
-    .category-name { font-size: 0.85rem; font-weight: 500; }
-    .category-amount { font-weight: 600; color: var(--primary); font-size: 0.9rem; }
-    .category-bar { height: 4px; background: rgba(0,0,0,0.05); border-radius: 2px; margin-top: 0.4rem; }
-    .category-bar-fill { height: 100%; background: var(--accent); border-radius: 2px; }
-    .expense-visuals { background: var(--card-bg); border-radius: 20px; padding: 1.5rem; box-shadow: var(--shadow); }
-    .expense-visuals h3 { font-size: 1.1rem; color: var(--primary); margin-bottom: 1rem; }
-    .treemap-container { display: grid; gap: 4px; min-height: 300px; }
-    .treemap-item { padding: 0.75rem; border-radius: 8px; display: flex; flex-direction: column; justify-content: space-between; color: white; font-size: 0.8rem; min-height: 60px; cursor: pointer; transition: transform 0.2s; }
-    .treemap-item:hover { transform: scale(1.02); }
-    .treemap-label { font-weight: 500; }
-    .treemap-value { font-weight: 600; font-size: 0.9rem; }
-    .detail-list { max-height: 350px; overflow-y: auto; margin-top: 1rem; }
-    .detail-item { display: flex; justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px solid rgba(0,0,0,0.05); font-size: 0.85rem; }
+    .legend-color.owner { background: #2d5a6e; }
+    .legend-color.guest { background: #c9a962; }
+    .legend-color.rental { background: #4a9e6e; }
+    .legend-color.vacant { background: #e0ddd5; }
+    
+    /* Expense Breakdown */
+    .expense-breakdown { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    .expense-card { background: var(--card-bg); border-radius: 20px; padding: 1.5rem; box-shadow: var(--shadow); }
+    .expense-card h3 { font-size: 1.1rem; color: var(--primary); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(0,0,0,0.05); }
+    .expense-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid rgba(0,0,0,0.05); }
+    .expense-item:last-child { border-bottom: none; }
+    .expense-name { font-size: 0.85rem; }
+    .expense-amount { font-weight: 600; color: var(--primary); }
     .expense-total { margin-top: 1rem; padding-top: 1rem; border-top: 2px solid var(--accent); display: flex; justify-content: space-between; }
     .total-label { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; }
     .total-amount { font-size: 1.2rem; color: var(--accent); font-weight: 600; }
-    .upload-section { background: var(--card-bg); border-radius: 20px; padding: 1.5rem; box-shadow: var(--shadow); }
-    .upload-zone { border: 2px dashed rgba(0,0,0,0.1); border-radius: 16px; padding: 2.5rem; text-align: center; cursor: pointer; }
+    
+    /* Upload Section */
+    .upload-section { background: var(--card-bg); border-radius: 20px; padding: 1.5rem; box-shadow: var(--shadow); max-width: 600px; }
+    .upload-section h3 { font-size: 1.1rem; color: var(--primary); margin-bottom: 1rem; }
+    .upload-zone { border: 2px dashed rgba(0,0,0,0.15); border-radius: 16px; padding: 3rem; text-align: center; cursor: pointer; transition: all 0.3s; }
     .upload-zone:hover { border-color: var(--accent); background: rgba(201,169,98,0.05); }
+    .upload-zone.dragover { border-color: var(--accent); background: rgba(201,169,98,0.1); }
     .upload-icon { font-size: 3rem; margin-bottom: 1rem; opacity: 0.5; }
-    .upload-text { color: var(--text-light); margin-bot
+    .upload-text { color: var(--text-light); }
+    .upload-text strong { color: var(--accent); }
+    .file-input { display: none; }
+    .upload-status { margin-top: 1rem; padding: 1rem; border-radius: 8px; display: none; }
+    .upload-status.success { display: block; background: #e8f5e9; color: #2e7d32; }
+    .upload-status.error { display: block; background: #ffebee; color: #c62828; }
+    .upload-status.loading { display: block; background: #e3f2fd; color: #1565c0; }
+    
+    /* Recent Files */
+    .recent-files { margin-top: 1.5rem; }
+    .recent-files h4 { font-size: 0.9rem; color: var(--text-light); margin-bottom: 0.75rem; }
+    .file-list { max-height: 200px; overflow-y: auto; }
+    .file-item { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid rgba(0,0,0,0.05); font-size: 0.85rem; }
+    .file-name { color: var(--primary); }
+    .file-date { color: var(--text-light); }
+    
+    /* Responsive */
+    @media (max-width: 900px) {
+      .expense-breakdown { grid-template-columns: 1fr; }
+      .charts-grid { grid-template-columns: 1fr; }
+      .header { flex-direction: column; gap: 1rem; }
+      .statement-selector { flex-direction: column; align-items: stretch; }
+      .statement-selector select { max-width: 100%; }
+    }
+    
+    /* Loading State */
+    .loading { opacity: 0.6; pointer-events: none; }
+    .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid rgba(0,0,0,0.1); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <!-- Login Screen -->
+  <div class="login-container" id="loginContainer">
+    <div class="login-card">
+      <div class="login-logo">
+        <h1>Villa 8</h1>
+        <span>Amanyara</span>
+      </div>
+      <div class="error-message" id="loginError"></div>
+      <form id="loginForm">
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="username" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="password" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn btn-primary">Sign In</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Dashboard -->
+  <div class="dashboard" id="dashboard">
+    <header class="header">
+      <div class="header-brand">
+        <h1>Villa 8</h1>
+        <span>Amanyara Dashboard</span>
+      </div>
+      <div class="header-actions">
+        <span id="welcomeUser"></span>
+        <button class="header-btn" onclick="logout()">Logout</button>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <!-- Statement Selector -->
+      <div class="statement-selector">
+        <label>Viewing:</label>
+        <select id="statementSelect" onchange="loadStatementData()">
+          <option value="">Loading statements...</option>
+        </select>
+        <span class="statement-count" id="statementCount"></span>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="overview">Overview</button>
+        <button class="tab-btn" data-tab="occupancy">Occupancy</button>
+        <button class="tab-btn" data-tab="expenses">Expenses</button>
+        <button class="tab-btn" data-tab="upload">Upload</button>
+      </div>
+
+      <!-- Overview Tab -->
+      <div class="tab-content active" id="tab-overview">
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-label">Current Balance</div>
+            <div class="kpi-value" id="kpiBalance">--</div>
+            <div class="kpi-change" id="kpiBalanceChange"></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Total Expenses</div>
+            <div class="kpi-value accent" id="kpiExpenses">--</div>
+            <div class="kpi-change" id="kpiExpensesChange"></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Owner Nights</div>
+            <div class="kpi-value" id="kpiOwnerNights">--</div>
+            <div class="kpi-change">This month</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Rental Revenue</div>
+            <div class="kpi-value accent" id="kpiRevenue">--</div>
+            <div class="kpi-change">Owner share (50%)</div>
+          </div>
+        </div>
+
+        <div class="charts-grid">
+          <div class="chart-card">
+            <h3>Monthly Expenses Trend</h3>
+            <div class="chart-container">
+              <canvas id="expenseChart"></canvas>
+            </div>
+          </div>
+          <div class="chart-card">
+            <h3>Occupancy Distribution</h3>
+            <div class="chart-container">
+              <canvas id="occupancyChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Occupancy Tab -->
+      <div class="tab-content" id="tab-occupancy">
+        <div class="occupancy-section">
+          <h3>Occupancy Summary</h3>
+          <div class="occupancy-summary">
+            <div class="occ-stat">
+              <div class="occ-stat-value owner" id="occOwner">--</div>
+              <div class="occ-stat-label">Owner Nights</div>
+            </div>
+            <div class="occ-stat">
+              <div class="occ-stat-value guest" id="occGuest">--</div>
+              <div class="occ-stat-label">Guest Nights</div>
+            </div>
+            <div class="occ-stat">
+              <div class="occ-stat-value rental" id="occRental">--</div>
+              <div class="occ-stat-label">Rental Nights</div>
+            </div>
+            <div class="occ-stat">
+              <div class="occ-stat-value vacant" id="occVacant">--</div>
+              <div class="occ-stat-label">Vacant Nights</div>
+            </div>
+          </div>
+          <div class="calendar-legend">
+            <div class="legend-item"><div class="legend-color owner"></div> Owner</div>
+            <div class="legend-item"><div class="legend-color guest"></div> Guest</div>
+            <div class="legend-item"><div class="legend-color rental"></div> Rental</div>
+            <div class="legend-item"><div class="legend-color vacant"></div> Vacant</div>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <h3>Monthly Occupancy Breakdown</h3>
+          <div class="chart-container">
+            <canvas id="occupancyBarChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Expenses Tab -->
+      <div class="tab-content" id="tab-expenses">
+        <div class="expense-breakdown">
+          <div class="expense-card">
+            <h3>Expense Categories</h3>
+            <div id="expenseList"></div>
+            <div class="expense-total">
+              <span class="total-label">Total Expenses</span>
+              <span class="total-amount" id="expenseTotal">--</span>
+            </div>
+          </div>
+          <div class="expense-card">
+            <h3>Expense Breakdown</h3>
+            <div class="chart-container">
+              <canvas id="expensePieChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Upload Tab -->
+      <div class="tab-content" id="tab-upload">
+        <div class="upload-section">
+          <h3>Upload Statement</h3>
+          <div class="upload-zone" id="uploadZone">
+            <div class="upload-icon">📄</div>
+            <p class="upload-text"><strong>Click to upload</strong> or drag and drop</p>
+            <p class="upload-text">PDF files (Monthly Statements)</p>
+          </div>
+          <input type="file" id="fileInput" class="file-input" accept=".pdf">
+          <div class="upload-status" id="uploadStatus"></div>
+          
+          <div class="recent-files">
+            <h4>Recent Uploads</h4>
+            <div class="file-list" id="fileList"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // State
+    let currentUser = null;
+    let dashboardData = null;
+    let charts = {};
+
+    // Check auth on load
+    async function checkAuth() {
+      try {
+        const res = await fetch('/api/auth/status');
+        const data = await res.json();
+        if (data.authenticated) {
+          currentUser = data.username;
+          showDashboard();
+        }
+      } catch (err) {
+        console.log('Not authenticated');
+      }
+    }
+
+    // Login
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const errorEl = document.getElementById('loginError');
+      
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          currentUser = data.username;
+          showDashboard();
+        } else {
+          errorEl.textContent = data.error || 'Login failed';
+          errorEl.style.display = 'block';
+        }
+      } catch (err) {
+        errorEl.textContent = 'Connection error';
+        errorEl.style.display = 'block';
+      }
+    });
+
+    // Logout
+    async function logout() {
+      await fetch('/api/logout', { method: 'POST' });
+      currentUser = null;
+      document.getElementById('loginContainer').classList.remove('hidden');
+      document.getElementById('dashboard').classList.remove('active');
+    }
+
+    // Show dashboard
+    async function showDashboard() {
+      document.getElementById('loginContainer').classList.add('hidden');
+      document.getElementById('dashboard').classList.add('active');
+      document.getElementById('welcomeUser').textContent = `Welcome, ${currentUser}`;
+      await loadDashboardData();
+    }
+
+    // Load dashboard data
+    async function loadDashboardData() {
+      try {
+        const res = await fetch('/api/dashboard');
+        dashboardData = await res.json();
+        
+        populateStatementSelector();
+        updateKPIs();
+        updateCharts();
+        updateRecentFiles();
+      } catch (err) {
+        console.error('Failed to load dashboard:', err);
+      }
+    }
+
+    // Populate statement selector
+    function populateStatementSelector() {
+      const select = document.getElementById('statementSelect');
+      const statements = dashboardData.statements || [];
+      
+      if (statements.length === 0) {
+        select.innerHTML = '<option value="">No statements uploaded</option>';
+        document.getElementById('statementCount').textContent = '';
+        return;
+      }
+      
+      const months = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      
+      select.innerHTML = statements.map((s, i) => 
+        `<option value="${s.id}" ${i === 0 ? 'selected' : ''}>${months[s.month]} ${s.year}</option>`
+      ).join('');
+      
+      document.getElementById('statementCount').textContent = `${statements.length} statement${statements.length !== 1 ? 's' : ''} on file`;
+    }
+
+    // Update KPIs
+    function updateKPIs() {
+      const statements = dashboardData.statements || [];
+      if (statements.length === 0) return;
+      
+      const latest = statements[0];
+      
+      const balance = parseFloat(latest.closing_balance) || 0;
+      document.getElementById('kpiBalance').textContent = formatCurrency(balance);
+      document.getElementById('kpiBalance').className = 'kpi-value' + (balance < 0 ? ' negative' : '');
+      
+      // Calculate total expenses from expense categories
+      const expenses = dashboardData.latestExpenses || [];
+      const totalExpenses = expenses.reduce((sum, e) => sum + parseFloat(e.total || 0), 0);
+      document.getElementById('kpiExpenses').textContent = formatCurrency(totalExpenses);
+      
+      document.getElementById('kpiOwnerNights').textContent = latest.owner_nights || 0;
+      document.getElementById('kpiRevenue').textContent = formatCurrency(latest.owner_revenue_share || 0);
+      
+      // Occupancy tab
+      document.getElementById('occOwner').textContent = latest.owner_nights || 0;
+      document.getElementById('occGuest').textContent = latest.guest_nights || 0;
+      document.getElementById('occRental').textContent = latest.rental_nights || 0;
+      document.getElementById('occVacant').textContent = latest.vacant_nights || 0;
+    }
+
+    // Update charts
+    function updateCharts() {
+      // Destroy existing charts
+      Object.values(charts).forEach(chart => chart.destroy());
+      charts = {};
+      
+      const statements = dashboardData.statements || [];
+      const expenses = dashboardData.latestExpenses || [];
+      
+      // Expense trend chart
+      if (statements.length > 0) {
+        const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const trends = dashboardData.expenseTrends || [];
+        
+        charts.expense = new Chart(document.getElementById('expenseChart'), {
+          type: 'line',
+          data: {
+            labels: trends.map(t => `${months[t.month]} ${t.year}`),
+            datasets: [{
+              label: 'Expenses',
+              data: trends.map(t => parseFloat(t.total_expenses) || 0),
+              borderColor: '#c9a962',
+              backgroundColor: 'rgba(201, 169, 98, 0.1)',
+              fill: true,
+              tension: 0.4
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              y: { beginAtZero: true, ticks: { callback: v => '$' + v.toLocaleString() } }
+            }
+          }
+        });
+      }
+      
+      // Occupancy pie chart
+      const latest = statements[0];
+      if (latest) {
+        charts.occupancy = new Chart(document.getElementById('occupancyChart'), {
+          type: 'doughnut',
+          data: {
+            labels: ['Owner', 'Guest', 'Rental', 'Vacant'],
+            datasets: [{
+              data: [
+                latest.owner_nights || 0,
+                latest.guest_nights || 0,
+                latest.rental_nights || 0,
+                latest.vacant_nights || 0
+              ],
+              backgroundColor: ['#2d5a6e', '#c9a962', '#4a9e6e', '#e0ddd5']
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom' } }
+          }
+        });
+      }
+      
+      // Expense pie chart
+      if (expenses.length > 0) {
+        const colors = ['#1a3a4a', '#2d5a6e', '#c9a962', '#4a9e6e', '#7a6e5e', '#a08060', '#5a8a9e', '#8ab06e'];
+        charts.expensePie = new Chart(document.getElementById('expensePieChart'), {
+          type: 'pie',
+          data: {
+            labels: expenses.map(e => e.category),
+            datasets: [{
+              data: expenses.map(e => parseFloat(e.total) || 0),
+              backgroundColor: colors.slice(0, expenses.length)
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: 'right' } }
+          }
+        });
+        
+        // Update expense list
+        const listHtml = expenses.map(e => `
+          <div class="expense-item">
+            <span class="expense-name">${e.subcategory || e.category}</span>
+            <span class="expense-amount">${formatCurrency(e.total)}</span>
+          </div>
+        `).join('');
+        document.getElementById('expenseList').innerHTML = listHtml;
+        
+        const total = expenses.reduce((sum, e) => sum + parseFloat(e.total || 0), 0);
+        document.getElementById('expenseTotal').textContent = formatCurrency(total);
+      }
+      
+      // Occupancy bar chart
+      if (statements.length > 0) {
+        const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const recentStatements = statements.slice(0, 6).reverse();
+        
+        charts.occupancyBar = new Chart(document.getElementById('occupancyBarChart'), {
+          type: 'bar',
+          data: {
+            labels: recentStatements.map(s => `${months[s.month]} ${s.year}`),
+            datasets: [
+              { label: 'Owner', data: recentStatements.map(s => s.owner_nights || 0), backgroundColor: '#2d5a6e' },
+              { label: 'Guest', data: recentStatements.map(s => s.guest_nights || 0), backgroundColor: '#c9a962' },
+              { label: 'Rental', data: recentStatements.map(s => s.rental_nights || 0), backgroundColor: '#4a9e6e' },
+              { label: 'Vacant', data: recentStatements.map(s => s.vacant_nights || 0), backgroundColor: '#e0ddd5' }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { x: { stacked: true }, y: { stacked: true } },
+            plugins: { legend: { position: 'bottom' } }
+          }
+        });
+      }
+    }
+
+    // Update recent files
+    function updateRecentFiles() {
+      const files = dashboardData.recentFiles || [];
+      const listEl = document.getElementById('fileList');
+      
+      if (files.length === 0) {
+        listEl.innerHTML = '<p style="color: var(--text-light); font-size: 0.85rem;">No files uploaded yet</p>';
+        return;
+      }
+      
+      listEl.innerHTML = files.map(f => `
+        <div class="file-item">
+          <span class="file-name">${f.filename}</span>
+          <span class="file-date">${new Date(f.upload_date).toLocaleDateString()}</span>
+        </div>
+      `).join('');
+    }
+
+    // Load specific statement data
+    async function loadStatementData() {
+      const statementId = document.getElementById('statementSelect').value;
+      if (!statementId) return;
+      
+      try {
+        const res = await fetch(`/api/statement/${statementId}`);
+        const data = await res.json();
+        
+        // Update displays with specific statement data
+        const s = data.statement;
+        document.getElementById('kpiBalance').textContent = formatCurrency(s.closing_balance);
+        document.getElementById('kpiOwnerNights').textContent = s.owner_nights || 0;
+        document.getElementById('kpiRevenue').textContent = formatCurrency(s.owner_revenue_share || 0);
+        
+        document.getElementById('occOwner').textContent = s.owner_nights || 0;
+        document.getElementById('occGuest').textContent = s.guest_nights || 0;
+        document.getElementById('occRental').textContent = s.rental_nights || 0;
+        document.getElementById('occVacant').textContent = s.vacant_nights || 0;
+        
+        // Update expense list
+        if (data.expensesByCategory && data.expensesByCategory.length > 0) {
+          const listHtml = data.expensesByCategory.map(e => `
+            <div class="expense-item">
+              <span class="expense-name">${e.category}</span>
+              <span class="expense-amount">${formatCurrency(e.total)}</span>
+            </div>
+          `).join('');
+          document.getElementById('expenseList').innerHTML = listHtml;
+          
+          const total = data.expensesByCategory.reduce((sum, e) => sum + parseFloat(e.total || 0), 0);
+          document.getElementById('expenseTotal').textContent = formatCurrency(total);
+          document.getElementById('kpiExpenses').textContent = formatCurrency(total);
+        }
+      } catch (err) {
+        console.error('Failed to load statement:', err);
+      }
+    }
+
+    // Format currency
+    function formatCurrency(amount) {
+      const num = parseFloat(amount) || 0;
+      return '$' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    // Tab switching
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+      });
+    });
+
+    // File upload
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('fileInput');
+    const uploadStatus = document.getElementById('uploadStatus');
+
+    uploadZone.addEventListener('click', () => fileInput.click());
+    uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) handleFileUpload(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length) handleFileUpload(fileInput.files[0]);
+    });
+
+    async function handleFileUpload(file) {
+      if (!file.name.endsWith('.pdf')) {
+        uploadStatus.className = 'upload-status error';
+        uploadStatus.textContent = 'Please upload a PDF file';
+        return;
+      }
+      
+      uploadStatus.className = 'upload-status loading';
+      uploadStatus.textContent = 'Uploading and processing...';
+      
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('fileType', 'statement');
+      
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          uploadStatus.className = 'upload-status success';
+          uploadStatus.textContent = `Successfully processed ${file.name}`;
+          await loadDashboardData();
+        } else {
+          uploadStatus.className = 'upload-status error';
+          uploadStatus.textContent = data.error || 'Upload failed';
+        }
+      } catch (err) {
+        uploadStatus.className = 'upload-status error';
+        uploadStatus.textContent = 'Upload failed: ' + err.message;
+      }
+      
+      fileInput.value = '';
+    }
+
+    // Initialize
+    checkAuth();
+  </script>
+</body>
+</html>
