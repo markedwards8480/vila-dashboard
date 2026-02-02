@@ -122,79 +122,87 @@ async function parseExcelStatement(buffer, filename) {
   
   // Find key rows by scanning for labels
   let ownerRow = -1, guestRow = -1, rentalRow = -1, vacantRow = -1;
-  let revenueRow = -1, grossRevenueRow = -1;
+  let revenueRow = -1, grossRevenueRow = -1, totalExpensesRow = -1;
   let expenseRows = [];
   
   for (let i = 0; i < Math.min(data.length, 80); i++) {
     const row = data[i];
     if (!row) continue;
     
+    // Get label from column A or C (index 0 or 2)
+    const label = String(row[0] || row[2] || '').toLowerCase().trim();
     const rowText = row.map(c => String(c || '').toLowerCase()).join(' ');
     
-    // Occupancy rows
+    // Occupancy rows (rows 4-8 area)
     if (rowText.includes('villa owner usage') && !rowText.includes('guest')) ownerRow = i;
     if (rowText.includes('villa owner guest')) guestRow = i;
     if (rowText.includes('villa rental') && !rowText.includes('revenue') && !rowText.includes('credit')) rentalRow = i;
-    if (rowText.includes('vacant') && !rowText.includes('ooo')) vacantRow = i;
+    if (/\bvacant\b/.test(rowText) && !rowText.includes('ooo')) vacantRow = i;
     
     // Revenue rows
     if (rowText.includes('50%') && rowText.includes('owner') && rowText.includes('revenue')) revenueRow = i;
     if (rowText.includes('gross villa revenue')) grossRevenueRow = i;
     
-    // Expense rows - look for specific expense categories
-    if (rowText.includes('payroll') && rowText.includes('expense')) {
-      expenseRows.push({ row: i, category: 'Payroll', subcategory: 'Staff Payroll' });
+    // Total expenses row
+    if (label === 'total expenses' || (label.includes('total expenses') && !label.includes('excluding'))) {
+      totalExpensesRow = i;
     }
-    if (rowText.includes('guest amenities')) {
+    
+    // Individual expense rows - look for specific categories
+    if (label.includes('payroll') && label.includes('expense') && !label.includes('subtotal') && !label.includes('total')) {
+      if (label.includes('administrat')) {
+        expenseRows.push({ row: i, category: 'Admin', subcategory: 'Admin Payroll' });
+      } else {
+        expenseRows.push({ row: i, category: 'Payroll', subcategory: 'Staff Payroll' });
+      }
+    }
+    if (label.includes('guest amenities')) {
       expenseRows.push({ row: i, category: 'General Services', subcategory: 'Guest Amenities' });
     }
-    if (rowText.includes('cleaning supplies')) {
+    if (label.includes('cleaning supplies')) {
       expenseRows.push({ row: i, category: 'General Services', subcategory: 'Cleaning Supplies' });
     }
-    if (rowText.includes('laundry') && !rowText.includes('total')) {
+    if (label === 'laundry' || (label.includes('laundry') && !label.includes('total'))) {
       expenseRows.push({ row: i, category: 'General Services', subcategory: 'Laundry' });
     }
-    if (rowText.includes('other operating') || rowText.includes('miscellaneous')) {
+    if (label.includes('other operating')) {
       expenseRows.push({ row: i, category: 'General Services', subcategory: 'Other Operating' });
     }
-    if (rowText.includes('contract services')) {
+    if (label.includes('telephone') || label.includes('cable tv') || label.includes('internet')) {
+      expenseRows.push({ row: i, category: 'Utilities', subcategory: 'Telecom' });
+    }
+    if (label.includes('contract services')) {
       expenseRows.push({ row: i, category: 'Maintenance', subcategory: 'Contract Services' });
     }
-    if (rowText.includes('electricity') && !rowText.includes('total')) {
-      expenseRows.push({ row: i, category: 'Utilities', subcategory: 'Electricity' });
+    if (label.includes('materials') && label.includes('maintenance')) {
+      expenseRows.push({ row: i, category: 'Maintenance', subcategory: 'Maintenance Materials' });
     }
-    if (rowText.includes('water') && !rowText.includes('total') && !rowText.includes('plant')) {
-      expenseRows.push({ row: i, category: 'Utilities', subcategory: 'Water' });
-    }
-    if (rowText.includes('telephone') || rowText.includes('internet') || rowText.includes('cable')) {
-      expenseRows.push({ row: i, category: 'General Services', subcategory: 'Telecom' });
-    }
-    if (rowText.includes('security')) {
-      expenseRows.push({ row: i, category: 'Security', subcategory: 'Security Program' });
-    }
-    if (rowText.includes('administration fee') || rowText.includes('admin fee') || rowText.includes('15%')) {
-      expenseRows.push({ row: i, category: 'Admin', subcategory: 'Admin Fee (15%)' });
-    }
-    if (rowText.includes('pool') && rowText.includes('maintenance')) {
-      expenseRows.push({ row: i, category: 'Maintenance', subcategory: 'Pool' });
-    }
-    if (rowText.includes('landscaping')) {
-      expenseRows.push({ row: i, category: 'Maintenance', subcategory: 'Landscaping' });
-    }
-    if (rowText.includes('maintenance program') || (rowText.includes('maintenance') && rowText.includes('materials'))) {
+    if (label.includes('maintenance program')) {
       expenseRows.push({ row: i, category: 'Maintenance', subcategory: 'Maintenance Program' });
     }
-    if (rowText.includes('insurance')) {
-      expenseRows.push({ row: i, category: 'Insurance', subcategory: 'Villa Insurance' });
+    if (label.includes('landscaping')) {
+      expenseRows.push({ row: i, category: 'Maintenance', subcategory: 'Landscaping' });
     }
-    if (rowText.includes('property tax')) {
-      expenseRows.push({ row: i, category: 'Taxes', subcategory: 'Property Tax' });
+    if (label.includes('pest control') || label.includes('waste removal')) {
+      expenseRows.push({ row: i, category: 'Maintenance', subcategory: 'Pest & Waste' });
+    }
+    if (label.includes('security')) {
+      expenseRows.push({ row: i, category: 'Security', subcategory: 'Security Program' });
+    }
+    if (label.includes('15%') || label.includes('administration fee')) {
+      expenseRows.push({ row: i, category: 'Admin', subcategory: 'Admin Fee (15%)' });
+    }
+    if (label === 'electricity' || (label.includes('electricity') && !label.includes('total'))) {
+      expenseRows.push({ row: i, category: 'Utilities', subcategory: 'Electricity' });
+    }
+    if (label === 'water' || (label.includes('water') && !label.includes('total') && !label.includes('plant'))) {
+      expenseRows.push({ row: i, category: 'Utilities', subcategory: 'Water' });
     }
   }
   
   console.log('Found rows - Owner:', ownerRow, 'Guest:', guestRow, 'Rental:', rentalRow, 'Vacant:', vacantRow);
-  console.log('Revenue row:', revenueRow, 'Gross revenue row:', grossRevenueRow);
-  console.log('Expense rows:', expenseRows.length);
+  console.log('Revenue row:', revenueRow, 'Total expenses row:', totalExpensesRow);
+  console.log('Expense rows found:', expenseRows.length);
   
   // Extract data for each month
   const results = [];
@@ -209,20 +217,20 @@ async function parseExcelStatement(buffer, filename) {
     const rentalNights = rentalRow >= 0 && data[rentalRow] ? Math.round(parseFloat(data[rentalRow][col]) || 0) : 0;
     const vacantNights = vacantRow >= 0 && data[vacantRow] ? Math.round(parseFloat(data[vacantRow][col]) || 0) : 0;
     
-    // Get revenue
+    // Get revenue (50% owner share)
     const ownerRevenue = revenueRow >= 0 && data[revenueRow] ? parseFloat(data[revenueRow][col]) || 0 : 0;
     const grossRevenue = grossRevenueRow >= 0 && data[grossRevenueRow] ? parseFloat(data[grossRevenueRow][col]) || 0 : 0;
     
-    // Get expenses
-    const expenses = [];
-    let totalExpenses = 0;
+    // Get total expenses from the TOTAL EXPENSES row
+    const totalExpenses = totalExpensesRow >= 0 && data[totalExpensesRow] ? parseFloat(data[totalExpensesRow][col]) || 0 : 0;
     
+    // Get individual expenses for breakdown
+    const expenses = [];
     for (const expRow of expenseRows) {
       if (data[expRow.row]) {
         const amount = parseFloat(data[expRow.row][col]) || 0;
         if (amount > 0) {
           expenses.push({ category: expRow.category, subcategory: expRow.subcategory, amount });
-          totalExpenses += amount;
         }
       }
     }
@@ -243,7 +251,7 @@ async function parseExcelStatement(buffer, filename) {
         expenses
       });
       
-      console.log(`Month ${month}: Owner=${ownerNights}, Guest=${guestNights}, Rental=${rentalNights}, Vacant=${vacantNights}, Revenue=${ownerRevenue.toFixed(2)}, Expenses=${totalExpenses.toFixed(2)}`);
+      console.log(`Month ${month}: Owner=${ownerNights}, Guest=${guestNights}, Rental=${rentalNights}, Vacant=${vacantNights}, Revenue=$${ownerRevenue.toFixed(2)}, Expenses=$${totalExpenses.toFixed(2)}`);
     }
   }
   
