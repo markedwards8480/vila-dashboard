@@ -61,6 +61,7 @@
     .tab-content.active { display: block; }
     
     .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.25rem; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
     .card { background: var(--card-bg); border-radius: 14px; padding: 1.25rem; box-shadow: var(--shadow); margin-bottom: 1.25rem; }
     .card h3 { font-size: 1rem; color: var(--primary); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(0,0,0,0.05); }
     
@@ -74,6 +75,7 @@
     .kpi-sub { font-size: 0.6rem; color: var(--text-light); margin-top: 0.2rem; }
     
     .chart-container { position: relative; height: 240px; }
+    .chart-container.tall { height: 300px; }
     
     .occ-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
     .occ-card { background: var(--card-bg); border-radius: 10px; padding: 1rem; box-shadow: var(--shadow); text-align: center; border-left: 4px solid; }
@@ -103,40 +105,45 @@
     .data-table tr.highlight { background: rgba(201,169,98,0.15); }
     .pct-bar { display: inline-block; height: 6px; background: var(--accent); border-radius: 3px; vertical-align: middle; }
     
-    .insight-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-    .insight { background: var(--card-bg); border-radius: 10px; padding: 1rem; box-shadow: var(--shadow); }
-    .insight-title { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-light); margin-bottom: 0.3rem; }
-    .insight-value { font-family: 'Cormorant Garamond', serif; font-size: 1.1rem; color: var(--primary); }
-    .insight-detail { font-size: 0.7rem; color: var(--text-light); margin-top: 0.2rem; }
+    /* Treemap styles */
+    .treemap { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; background: #f5f5f5; border-radius: 12px; min-height: 350px; align-content: flex-start; }
+    .treemap-item { border-radius: 8px; padding: 0.75rem; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: white; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; overflow: hidden; }
+    .treemap-item:hover { transform: scale(1.02); box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 10; }
+    .treemap-item .label { font-size: 0.7rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.03em; opacity: 0.9; }
+    .treemap-item .value { font-family: 'Cormorant Garamond', serif; font-size: 1.3rem; font-weight: 600; margin-top: 0.25rem; }
+    .treemap-item .pct { font-size: 0.65rem; opacity: 0.8; margin-top: 0.15rem; }
+    .treemap-item.small .label { font-size: 0.6rem; }
+    .treemap-item.small .value { font-size: 1rem; }
     
-    .heatmap { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
-    .heatmap th, .heatmap td { padding: 0.4rem 0.5rem; text-align: center; border: 1px solid rgba(0,0,0,0.04); }
-    .heatmap th { background: var(--primary); color: white; font-size: 0.65rem; }
-    .heatmap th:first-child, .heatmap td:first-child { text-align: left; min-width: 120px; }
-    .heatmap td:first-child { font-weight: 500; background: rgba(0,0,0,0.02); }
-    .heat-0 { background: #f8f8f8; } .heat-1 { background: #fff8e1; } .heat-2 { background: #ffecb3; } .heat-3 { background: #ffe082; } .heat-4 { background: #ffd54f; } .heat-5 { background: #ffca28; }
+    /* Floating Chat */
+    .chat-fab { position: fixed; bottom: 24px; right: 24px; width: 60px; height: 60px; border-radius: 50%; background: var(--primary); color: white; border: none; box-shadow: 0 4px 16px rgba(0,0,0,0.3); cursor: pointer; font-size: 1.5rem; z-index: 1000; transition: transform 0.2s, background 0.2s; }
+    .chat-fab:hover { background: var(--primary-light); transform: scale(1.05); }
+    .chat-fab.open { background: var(--danger); }
     
-    .chat-container { display: flex; flex-direction: column; height: 400px; }
-    .chat-messages { flex: 1; overflow-y: auto; padding: 1rem; background: #f9f9f9; border-radius: 8px; margin-bottom: 1rem; }
+    .chat-panel { position: fixed; bottom: 100px; right: 24px; width: 380px; max-width: calc(100vw - 48px); height: 500px; max-height: calc(100vh - 150px); background: var(--card-bg); border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); z-index: 999; display: none; flex-direction: column; overflow: hidden; }
+    .chat-panel.open { display: flex; }
+    .chat-header { background: var(--primary); color: white; padding: 1rem; display: flex; align-items: center; gap: 0.75rem; }
+    .chat-header h4 { font-size: 1rem; }
+    .chat-messages { flex: 1; overflow-y: auto; padding: 1rem; background: #f9f9f9; }
     .chat-message { margin-bottom: 1rem; max-width: 85%; }
     .chat-message.user { margin-left: auto; }
     .chat-message .bubble { padding: 0.75rem 1rem; border-radius: 12px; font-size: 0.85rem; line-height: 1.5; }
-    .chat-message.user .bubble { background: var(--primary); color: white; }
-    .chat-message.ai .bubble { background: white; border: 1px solid rgba(0,0,0,0.1); }
-    .chat-input-area { display: flex; gap: 0.75rem; }
-    .chat-input-area input { flex: 1; padding: 0.75rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; font-family: inherit; }
+    .chat-message.user .bubble { background: var(--primary); color: white; border-bottom-right-radius: 4px; }
+    .chat-message.ai .bubble { background: white; border: 1px solid rgba(0,0,0,0.1); border-bottom-left-radius: 4px; }
+    .chat-input-area { display: flex; gap: 0.5rem; padding: 0.75rem; border-top: 1px solid rgba(0,0,0,0.1); background: white; }
+    .chat-input-area input { flex: 1; padding: 0.6rem 0.75rem; border: 1px solid rgba(0,0,0,0.15); border-radius: 20px; font-family: inherit; font-size: 0.85rem; }
+    .chat-input-area button { width: 36px; height: 36px; border-radius: 50%; background: var(--primary); color: white; border: none; cursor: pointer; }
     
     .upload-zone { border: 2px dashed rgba(0,0,0,0.15); border-radius: 12px; padding: 2rem; text-align: center; cursor: pointer; }
     .upload-zone:hover { border-color: var(--accent); background: rgba(201,169,98,0.05); }
-    .upload-status { margin-top: 1rem; padding: 0.75rem; border-radius: 6px; display: none; font-size: 0.8rem; }
+    .upload-status { margin-top: 1rem; padding: 0.75rem; border-radius: 6px; display: none; font-size: 0.8rem; white-space: pre-line; }
     .upload-status.success { display: block; background: #e8f5e9; color: var(--success); }
     .upload-status.error { display: block; background: #ffebee; color: var(--danger); }
     .upload-status.loading { display: block; background: #e3f2fd; color: #1565c0; }
     .file-input { display: none; }
-    .file-list { margin-top: 1rem; font-size: 0.75rem; }
-    .file-item { display: flex; justify-content: space-between; padding: 0.35rem 0; border-bottom: 1px solid rgba(0,0,0,0.04); }
     
-    @media (max-width: 1000px) { .grid-2 { grid-template-columns: 1fr; } .occ-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 1000px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } .occ-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 500px) { .chat-panel { right: 12px; bottom: 90px; width: calc(100vw - 24px); } }
   </style>
 </head>
 <body>
@@ -174,33 +181,35 @@
         <button class="tab-btn active" data-tab="overview">Overview</button>
         <button class="tab-btn" data-tab="occupancy">Occupancy</button>
         <button class="tab-btn" data-tab="expenses">Expenses</button>
-        <button class="tab-btn" data-tab="pareto">80/20 Analysis</button>
-        <button class="tab-btn" data-tab="heatmap">Heat Map</button>
-        <button class="tab-btn" data-tab="ai">AI Assistant</button>
+        <button class="tab-btn" data-tab="revenue">Revenue</button>
+        <button class="tab-btn" data-tab="treemap">Expense Map</button>
         <button class="tab-btn" data-tab="upload">Upload</button>
       </div>
 
+      <!-- OVERVIEW TAB -->
       <div class="tab-content active" id="tab-overview">
         <div class="kpi-grid">
-          <div class="kpi"><div class="kpi-label">Current Balance</div><div class="kpi-value" id="kpiBalance">--</div></div>
-          <div class="kpi"><div class="kpi-label">Total Expenses</div><div class="kpi-value accent" id="kpiExpenses">--</div><div class="kpi-sub" id="kpiExpPct"></div></div>
           <div class="kpi"><div class="kpi-label">Owner Revenue (50%)</div><div class="kpi-value accent" id="kpiRevenue">--</div></div>
+          <div class="kpi"><div class="kpi-label">Total Expenses</div><div class="kpi-value" id="kpiExpenses">--</div><div class="kpi-sub" id="kpiExpPct"></div></div>
           <div class="kpi"><div class="kpi-label">Net Income</div><div class="kpi-value" id="kpiNet">--</div></div>
+          <div class="kpi"><div class="kpi-label">Avg Daily Rate</div><div class="kpi-value accent" id="kpiADR">--</div><div class="kpi-sub">per rental night</div></div>
           <div class="kpi"><div class="kpi-label">Occupied Nights</div><div class="kpi-value" id="kpiOccupied">--</div><div class="kpi-sub" id="kpiOccRate"></div></div>
           <div class="kpi"><div class="kpi-label">Cost/Occupied Night</div><div class="kpi-value" id="kpiCostNight">--</div></div>
         </div>
-        <div class="insight-grid">
-          <div class="insight"><div class="insight-title">Highest Expense Month</div><div class="insight-value" id="insHighExp">--</div><div class="insight-detail" id="insHighExpAmt"></div></div>
-          <div class="insight"><div class="insight-title">Lowest Expense Month</div><div class="insight-value" id="insLowExp">--</div><div class="insight-detail" id="insLowExpAmt"></div></div>
-          <div class="insight"><div class="insight-title">Best Revenue Month</div><div class="insight-value" id="insHighRev">--</div><div class="insight-detail" id="insHighRevAmt"></div></div>
-          <div class="insight"><div class="insight-title">Most Rental Activity</div><div class="insight-value" id="insMostRental">--</div><div class="insight-detail" id="insMostRentalAmt"></div></div>
-        </div>
+        
         <div class="grid-2">
-          <div class="card"><h3>Expense Trend</h3><div class="chart-container"><canvas id="expenseChart"></canvas></div></div>
-          <div class="card"><h3>Occupancy Mix</h3><div class="chart-container"><canvas id="occupancyChart"></canvas></div></div>
+          <div class="card"><h3>Revenue vs Expenses</h3><div class="chart-container tall"><canvas id="revenueExpenseChart"></canvas></div></div>
+          <div class="card"><h3>Occupancy Mix</h3><div class="chart-container tall"><canvas id="occupancyChart"></canvas></div></div>
+        </div>
+        
+        <div class="grid-3">
+          <div class="card"><h3>Monthly Net Income</h3><div class="chart-container"><canvas id="netIncomeChart"></canvas></div></div>
+          <div class="card"><h3>Expense Breakdown</h3><div class="chart-container"><canvas id="expensePieChart"></canvas></div></div>
+          <div class="card"><h3>ADR by Month</h3><div class="chart-container"><canvas id="adrChart"></canvas></div></div>
         </div>
       </div>
 
+      <!-- OCCUPANCY TAB -->
       <div class="tab-content" id="tab-occupancy">
         <div class="occ-grid">
           <div class="occ-card owner"><div class="occ-value" id="occOwner">--</div><div class="occ-label">Owner Nights</div><div class="occ-pct" id="occOwnerPct">--</div></div>
@@ -208,42 +217,48 @@
           <div class="occ-card rental"><div class="occ-value" id="occRental">--</div><div class="occ-label">Rental Nights</div><div class="occ-pct" id="occRentalPct">--</div></div>
           <div class="occ-card vacant"><div class="occ-value" id="occVacant">--</div><div class="occ-label">Vacant Nights</div><div class="occ-pct" id="occVacantPct">--</div></div>
         </div>
-        <div class="card"><h3>Monthly Breakdown</h3><div id="occTableContainer"></div></div>
-        <div class="card"><h3>Occupancy Over Time</h3><div class="chart-container" style="height:280px;"><canvas id="occupancyBarChart"></canvas></div></div>
-      </div>
-
-      <div class="tab-content" id="tab-expenses">
-        <div class="card"><h3>Expense Breakdown by Category</h3><div id="expenseTableContainer"></div></div>
         <div class="grid-2">
-          <div class="card"><h3>By Category</h3><div class="chart-container"><canvas id="expensePieChart"></canvas></div></div>
-          <div class="card"><h3>Top Cost Drivers</h3><div class="chart-container"><canvas id="expenseBarChart"></canvas></div></div>
+          <div class="card"><h3>Occupancy Over Time</h3><div class="chart-container tall"><canvas id="occupancyBarChart"></canvas></div></div>
+          <div class="card"><h3>Usage Pattern</h3><div class="chart-container tall"><canvas id="usagePatternChart"></canvas></div></div>
         </div>
+        <div class="card"><h3>Monthly Breakdown</h3><div id="occTableContainer"></div></div>
       </div>
 
-      <div class="tab-content" id="tab-pareto">
-        <div class="card"><h3>80/20 Pareto Analysis</h3><p style="font-size:0.75rem;color:var(--text-light);margin-bottom:1rem;">Highlighted items = ~80% of costs</p><div id="paretoTableContainer"></div></div>
-        <div class="card"><h3>Cumulative Distribution</h3><div class="chart-container" style="height:280px;"><canvas id="paretoChart"></canvas></div></div>
+      <!-- EXPENSES TAB -->
+      <div class="tab-content" id="tab-expenses">
+        <div class="grid-2">
+          <div class="card"><h3>Expense Trend</h3><div class="chart-container tall"><canvas id="expenseTrendChart"></canvas></div></div>
+          <div class="card"><h3>Top Cost Drivers</h3><div class="chart-container tall"><canvas id="expenseBarChart"></canvas></div></div>
+        </div>
+        <div class="card"><h3>Expense Breakdown by Category</h3><div id="expenseTableContainer"></div></div>
       </div>
 
-      <div class="tab-content" id="tab-heatmap">
-        <div class="card"><h3>Expense Heat Map</h3><div style="overflow-x:auto;" id="heatmapContainer"></div></div>
+      <!-- REVENUE TAB -->
+      <div class="tab-content" id="tab-revenue">
+        <div class="kpi-grid">
+          <div class="kpi"><div class="kpi-label">Gross Revenue</div><div class="kpi-value accent" id="kpiGross">--</div></div>
+          <div class="kpi"><div class="kpi-label">Owner Share (50%)</div><div class="kpi-value accent" id="kpiOwnerShare">--</div></div>
+          <div class="kpi"><div class="kpi-label">Rental Nights</div><div class="kpi-value" id="kpiRentalNights">--</div></div>
+          <div class="kpi"><div class="kpi-label">Avg Daily Rate</div><div class="kpi-value accent" id="kpiADR2">--</div></div>
+        </div>
+        <div class="grid-2">
+          <div class="card"><h3>Revenue by Month</h3><div class="chart-container tall"><canvas id="revenueBarChart"></canvas></div></div>
+          <div class="card"><h3>ADR vs Rental Nights</h3><div class="chart-container tall"><canvas id="adrVsNightsChart"></canvas></div></div>
+        </div>
+        <div class="card"><h3>Rental Activity Summary</h3><div id="revenueTableContainer"></div></div>
       </div>
 
-      <div class="tab-content" id="tab-ai">
+      <!-- TREEMAP TAB -->
+      <div class="tab-content" id="tab-treemap">
         <div class="card">
-          <h3>AI Assistant</h3>
-          <div class="chat-container">
-            <div class="chat-messages" id="chatMessages">
-              <div class="chat-message ai"><div class="bubble">Ask me about your villa finances!</div></div>
-            </div>
-            <div class="chat-input-area">
-              <input type="text" id="chatInput" placeholder="Ask a question..." onkeypress="if(event.key==='Enter')sendChat()">
-              <button class="btn btn-primary btn-sm" onclick="sendChat()">Send</button>
-            </div>
-          </div>
+          <h3>Expense Treemap</h3>
+          <p style="font-size:0.75rem;color:var(--text-light);margin-bottom:1rem;">Larger boxes = higher expenses. Click for details.</p>
+          <div class="treemap" id="treemapContainer"></div>
         </div>
+        <div class="card"><h3>80/20 Pareto Analysis</h3><p style="font-size:0.75rem;color:var(--text-light);margin-bottom:1rem;">Highlighted items represent ~80% of total costs</p><div id="paretoTableContainer"></div></div>
       </div>
 
+      <!-- UPLOAD TAB -->
       <div class="tab-content" id="tab-upload">
         <div class="grid-2">
           <div class="card">
@@ -262,16 +277,32 @@
             <h3>Data Management</h3>
             <p style="color:var(--text-light);font-size:0.85rem;margin-bottom:1rem;">Clear all existing data before uploading a fresh Excel file.</p>
             <button class="btn btn-outline" onclick="clearAllData()" style="background:#fee;border-color:#c00;color:#c00;">🗑️ Clear All Data</button>
-            <div class="file-list" id="fileList" style="margin-top:1.5rem;"><h4 style="font-size:0.75rem;color:var(--text-light);margin-bottom:0.5rem;">Recent Uploads</h4></div>
           </div>
         </div>
       </div>
     </main>
+
+    <!-- Floating Chat Button -->
+    <button class="chat-fab" id="chatFab" onclick="toggleChat()">💬</button>
+    <div class="chat-panel" id="chatPanel">
+      <div class="chat-header">
+        <span style="font-size:1.5rem;">🤖</span>
+        <h4>Villa Assistant</h4>
+      </div>
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-message ai"><div class="bubble">Hi! Ask me anything about your villa finances - expenses, revenue, occupancy trends, or comparisons.</div></div>
+      </div>
+      <div class="chat-input-area">
+        <input type="text" id="chatInput" placeholder="Ask a question..." onkeypress="if(event.key==='Enter')sendChat()">
+        <button onclick="sendChat()">➤</button>
+      </div>
+    </div>
   </div>
 
   <script>
     let currentUser = null, dashboardData = null, allStatements = [], availableYears = [], charts = {}, selectedIds = new Set();
     const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const treemapColors = ['#1a3a4a', '#2d5a6e', '#c9a962', '#4a9e6e', '#7a6e5e', '#a08060', '#5d7a8c', '#8b7355', '#6b8e6b', '#9a8070'];
 
     async function checkAuth() {
       try {
@@ -315,7 +346,11 @@
       availableYears = data.availableYears || [];
       buildMonthGrid();
       buildQuickSelect();
-      if (allStatements.length > 0) toggleMonth(allStatements[0].id);
+      if (allStatements.length > 0) {
+        selectedIds = new Set(allStatements.map(s => s.id));
+        updateChipStyles();
+        loadSelectedData();
+      }
     }
 
     function buildQuickSelect() {
@@ -346,7 +381,7 @@
     }
 
     function selectAll() { selectedIds = new Set(allStatements.map(s => s.id)); updateChipStyles(); loadSelectedData(); }
-    function selectNone() { selectedIds.clear(); updateChipStyles(); document.getElementById('viewInfo').textContent = 'No months selected'; dashboardData = null; }
+    function selectNone() { selectedIds.clear(); updateChipStyles(); document.getElementById('viewInfo').textContent = 'No months selected'; }
 
     function quickSelectChange() {
       const mode = document.getElementById('quickSelect').value;
@@ -370,41 +405,36 @@
       updateDisplay();
     }
 
-    function fmt(n) { return '$' + (parseFloat(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-    function fmtK(n) { return '$' + ((parseFloat(n) || 0) / 1000).toFixed(1) + 'k'; }
+    function fmt(n) { return '$' + (parseFloat(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
 
     function updateDisplay() {
       if (!dashboardData) return;
       const t = dashboardData.totals || {};
-      const ins = dashboardData.insights || {};
+      const stmts = dashboardData.statements || [];
       
-      // CORRECT: Occupied = Owner + Guest + Rental (NOT vacant)
       const occupiedNights = (t.totalOwnerNights||0) + (t.totalGuestNights||0) + (t.totalRentalNights||0);
       const totalNights = occupiedNights + (t.totalVacantNights||0);
-      
-      document.getElementById('kpiBalance').textContent = fmt(t.totalBalance);
-      document.getElementById('kpiExpenses').textContent = fmt(t.totalExpenses);
-      document.getElementById('kpiRevenue').textContent = fmt(t.totalRevenue);
-      
       const net = (t.totalRevenue || 0) - (t.totalExpenses || 0);
+      
+      // ADR = Gross Revenue / Rental Nights (Gross = Owner * 2)
+      const grossRevenue = (t.totalRevenue || 0) * 2;
+      const adr = t.totalRentalNights > 0 ? grossRevenue / t.totalRentalNights : 0;
+      
+      // Overview KPIs
+      document.getElementById('kpiRevenue').textContent = fmt(t.totalRevenue);
+      document.getElementById('kpiExpenses').textContent = fmt(t.totalExpenses);
+      document.getElementById('kpiExpPct').textContent = t.totalRevenue > 0 ? `${(t.totalExpenses/t.totalRevenue*100).toFixed(0)}% of revenue` : '';
+      
       const netEl = document.getElementById('kpiNet');
       netEl.textContent = fmt(net);
       netEl.className = 'kpi-value ' + (net >= 0 ? 'success' : 'danger');
       
+      document.getElementById('kpiADR').textContent = adr > 0 ? fmt(adr) : '--';
       document.getElementById('kpiOccupied').textContent = occupiedNights;
       document.getElementById('kpiOccRate').textContent = totalNights > 0 ? `${(occupiedNights/totalNights*100).toFixed(0)}% occupancy` : '';
       document.getElementById('kpiCostNight').textContent = occupiedNights > 0 ? fmt(t.totalExpenses / occupiedNights) : '--';
-      document.getElementById('kpiExpPct').textContent = t.totalRevenue > 0 ? `${(t.totalExpenses/t.totalRevenue*100).toFixed(0)}% of revenue` : '';
       
-      document.getElementById('insHighExp').textContent = ins.highestExpenseMonth || '--';
-      document.getElementById('insHighExpAmt').textContent = ins.highestExpenseAmount ? fmt(ins.highestExpenseAmount) : '';
-      document.getElementById('insLowExp').textContent = ins.lowestExpenseMonth || '--';
-      document.getElementById('insLowExpAmt').textContent = ins.lowestExpenseAmount ? fmt(ins.lowestExpenseAmount) : '';
-      document.getElementById('insHighRev').textContent = ins.highestRevenueMonth || '--';
-      document.getElementById('insHighRevAmt').textContent = ins.highestRevenueAmount ? fmt(ins.highestRevenueAmount) : '';
-      document.getElementById('insMostRental').textContent = ins.mostRentalMonth || '--';
-      document.getElementById('insMostRentalAmt').textContent = ins.mostRentalNights ? `${ins.mostRentalNights} nights` : '';
-      
+      // Occupancy cards
       document.getElementById('occOwner').textContent = t.totalOwnerNights || 0;
       document.getElementById('occGuest').textContent = t.totalGuestNights || 0;
       document.getElementById('occRental').textContent = t.totalRentalNights || 0;
@@ -416,12 +446,63 @@
         document.getElementById('occVacantPct').textContent = `${(t.totalVacantNights/totalNights*100).toFixed(1)}%`;
       }
       
+      // Revenue tab KPIs
+      document.getElementById('kpiGross').textContent = fmt(grossRevenue);
+      document.getElementById('kpiOwnerShare').textContent = fmt(t.totalRevenue);
+      document.getElementById('kpiRentalNights').textContent = t.totalRentalNights || 0;
+      document.getElementById('kpiADR2').textContent = adr > 0 ? fmt(adr) : '--';
+      
       updateCharts();
       updateTables();
+      updateTreemap();
+    }
+
+    function updateTreemap() {
+      const cats = dashboardData?.expensesByCategory || [];
+      const container = document.getElementById('treemapContainer');
+      if (!cats.length) { container.innerHTML = '<p style="color:var(--text-light);padding:2rem;text-align:center;">No expense data</p>'; return; }
+      
+      const total = cats.reduce((s, c) => s + c.total, 0);
+      const containerWidth = container.offsetWidth - 8;
+      const containerHeight = 350;
+      
+      // Build treemap layout
+      let html = '';
+      cats.forEach((cat, i) => {
+        const pct = (cat.total / total * 100);
+        const area = (pct / 100) * containerWidth * containerHeight;
+        const size = Math.sqrt(area);
+        const minSize = Math.max(80, size * 0.8);
+        const color = treemapColors[i % treemapColors.length];
+        const isSmall = pct < 8;
+        
+        html += `<div class="treemap-item${isSmall ? ' small' : ''}" style="background:${color};flex:${Math.max(pct, 5)} 1 ${minSize}px;min-width:${minSize}px;min-height:${Math.min(minSize, 120)}px;" onclick="showCategoryDetail('${cat.category}')">
+          <div class="label">${cat.category}</div>
+          <div class="value">${fmt(cat.total)}</div>
+          <div class="pct">${pct.toFixed(1)}%</div>
+        </div>`;
+      });
+      
+      container.innerHTML = html;
+    }
+
+    function showCategoryDetail(category) {
+      const cats = dashboardData?.expensesByCategory || [];
+      const cat = cats.find(c => c.category === category);
+      if (!cat) return;
+      
+      let details = `${category}\n${fmt(cat.total)} (${cat.pctOfTotal.toFixed(1)}% of total)\n\n`;
+      cat.items.forEach(item => {
+        details += `• ${item.subcategory}: ${fmt(item.total)}\n`;
+      });
+      alert(details);
     }
 
     function updateTables() {
-      const cats = dashboardData.expensesByCategory || [];
+      const cats = dashboardData?.expensesByCategory || [];
+      const stmts = dashboardData?.statements || [];
+      
+      // Expense table
       const expContainer = document.getElementById('expenseTableContainer');
       if (!cats.length) { expContainer.innerHTML = '<p style="color:var(--text-light)">No expense data</p>'; }
       else {
@@ -435,7 +516,8 @@
         expContainer.innerHTML = html;
       }
 
-      const items = dashboardData.paretoAnalysis || [];
+      // Pareto table
+      const items = dashboardData?.paretoAnalysis || [];
       const paretoContainer = document.getElementById('paretoTableContainer');
       if (!items.length) { paretoContainer.innerHTML = '<p style="color:var(--text-light)">No data</p>'; }
       else {
@@ -448,105 +530,194 @@
         paretoContainer.innerHTML = html;
       }
 
-      const stmts = dashboardData.statements || [];
+      // Occupancy table
       const occContainer = document.getElementById('occTableContainer');
-      if (stmts.length <= 1) { occContainer.innerHTML = ''; }
+      if (!stmts.length) { occContainer.innerHTML = ''; }
       else {
         const sorted = [...stmts].sort((a, b) => a.year - b.year || a.month - b.month);
         let totals = { o: 0, g: 0, r: 0, v: 0 };
-        let html = `<table class="data-table"><thead><tr><th>Type</th>${sorted.map(s => `<th class="r">${monthNames[s.month]}</th>`).join('')}<th class="r">Total</th></tr></thead><tbody>`;
-        html += `<tr><td>Owner</td>${sorted.map(s => { totals.o += s.owner_nights || 0; return `<td class="r">${s.owner_nights || 0}</td>`; }).join('')}<td class="r"><strong>${totals.o}</strong></td></tr>`;
-        html += `<tr><td>Guest</td>${sorted.map(s => { totals.g += s.guest_nights || 0; return `<td class="r">${s.guest_nights || 0}</td>`; }).join('')}<td class="r"><strong>${totals.g}</strong></td></tr>`;
-        html += `<tr><td>Rental</td>${sorted.map(s => { totals.r += s.rental_nights || 0; return `<td class="r">${s.rental_nights || 0}</td>`; }).join('')}<td class="r"><strong>${totals.r}</strong></td></tr>`;
-        html += `<tr><td>Vacant</td>${sorted.map(s => { totals.v += s.vacant_nights || 0; return `<td class="r">${s.vacant_nights || 0}</td>`; }).join('')}<td class="r"><strong>${totals.v}</strong></td></tr>`;
-        html += `</tbody></table>`;
+        let html = `<table class="data-table"><thead><tr><th>Month</th><th class="r">Owner</th><th class="r">Guest</th><th class="r">Rental</th><th class="r">Vacant</th><th class="r">Total</th></tr></thead><tbody>`;
+        for (const s of sorted) {
+          const o = parseInt(s.owner_nights) || 0, g = parseInt(s.guest_nights) || 0, r = parseInt(s.rental_nights) || 0, v = parseInt(s.vacant_nights) || 0;
+          totals.o += o; totals.g += g; totals.r += r; totals.v += v;
+          html += `<tr><td>${monthNames[s.month]} ${s.year}</td><td class="r">${o}</td><td class="r">${g}</td><td class="r">${r}</td><td class="r">${v}</td><td class="r">${o+g+r+v}</td></tr>`;
+        }
+        html += `<tr class="total"><td>Total</td><td class="r">${totals.o}</td><td class="r">${totals.g}</td><td class="r">${totals.r}</td><td class="r">${totals.v}</td><td class="r">${totals.o+totals.g+totals.r+totals.v}</td></tr></tbody></table>`;
         occContainer.innerHTML = html;
       }
 
-      const heatContainer = document.getElementById('heatmapContainer');
-      if (!cats.length || stmts.length <= 1) { heatContainer.innerHTML = '<p style="color:var(--text-light)">Need multiple months</p>'; }
+      // Revenue table
+      const revContainer = document.getElementById('revenueTableContainer');
+      const rentalMonths = stmts.filter(s => parseFloat(s.owner_revenue_share) > 0);
+      if (!rentalMonths.length) { revContainer.innerHTML = '<p style="color:var(--text-light)">No rental revenue in selected period</p>'; }
       else {
-        const sorted = [...stmts].sort((a, b) => a.year - b.year || a.month - b.month);
-        const monthKeys = sorted.map(s => `${s.year}-${String(s.month).padStart(2, '0')}`);
-        let maxVal = 0;
-        for (const cat of cats) for (const item of cat.items) for (const v of Object.values(item.monthly || {})) if (v > maxVal) maxVal = v;
-        const heatClass = v => { if (!v) return 'heat-0'; const p = v / maxVal; return p < 0.2 ? 'heat-1' : p < 0.4 ? 'heat-2' : p < 0.6 ? 'heat-3' : p < 0.8 ? 'heat-4' : 'heat-5'; };
-        let html = `<table class="heatmap"><thead><tr><th>Expense</th>${sorted.map(s => `<th>${monthNames[s.month]}</th>`).join('')}<th>Total</th></tr></thead><tbody>`;
-        for (const cat of cats) for (const item of cat.items) {
-          html += `<tr><td>${item.subcategory}</td>${monthKeys.map(mk => { const v = item.monthly?.[mk] || 0; return `<td class="${heatClass(v)}">${v ? fmtK(v) : '-'}</td>`; }).join('')}<td><strong>${fmtK(item.total)}</strong></td></tr>`;
+        const sorted = [...rentalMonths].sort((a, b) => a.year - b.year || a.month - b.month);
+        let html = `<table class="data-table"><thead><tr><th>Month</th><th class="r">Rental Nights</th><th class="r">Gross Revenue</th><th class="r">Owner Share (50%)</th><th class="r">ADR</th></tr></thead><tbody>`;
+        let totalNights = 0, totalGross = 0, totalOwner = 0;
+        for (const s of sorted) {
+          const nights = parseInt(s.rental_nights) || 0;
+          const owner = parseFloat(s.owner_revenue_share) || 0;
+          const gross = owner * 2;
+          const adr = nights > 0 ? gross / nights : 0;
+          totalNights += nights; totalGross += gross; totalOwner += owner;
+          html += `<tr><td>${monthNames[s.month]} ${s.year}</td><td class="r">${nights}</td><td class="r">${fmt(gross)}</td><td class="r">${fmt(owner)}</td><td class="r">${fmt(adr)}</td></tr>`;
         }
-        html += `</tbody></table>`;
-        heatContainer.innerHTML = html;
+        const avgAdr = totalNights > 0 ? totalGross / totalNights : 0;
+        html += `<tr class="total"><td>Total / Avg</td><td class="r">${totalNights}</td><td class="r">${fmt(totalGross)}</td><td class="r">${fmt(totalOwner)}</td><td class="r">${fmt(avgAdr)}</td></tr></tbody></table>`;
+        revContainer.innerHTML = html;
       }
-      
-      const files = dashboardData?.recentFiles || [];
-      document.getElementById('fileList').innerHTML = files.length ? files.slice(0, 8).map(f => `<div class="file-item"><span>${f.filename}</span><span style="color:var(--text-light)">${new Date(f.upload_date).toLocaleDateString()}</span></div>`).join('') : '';
     }
 
     function updateCharts() {
-      Object.values(charts).forEach(c => c.destroy());
+      Object.values(charts).forEach(c => c?.destroy());
       charts = {};
       if (!dashboardData) return;
+      
       const stmts = dashboardData.statements || [];
       const t = dashboardData.totals || {};
       const cats = dashboardData.expensesByCategory || [];
-      const pareto = dashboardData.paretoAnalysis || [];
       if (!stmts.length) return;
       
       const sorted = [...stmts].sort((a, b) => a.year - b.year || a.month - b.month);
       const labels = sorted.map(s => `${monthNames[s.month]} ${s.year}`);
       
-      charts.expense = new Chart(document.getElementById('expenseChart'), {
-        type: 'line', data: { labels, datasets: [{ label: 'Expenses', data: sorted.map(s => parseFloat(s.total_expenses) || 0), borderColor: '#c9a962', backgroundColor: 'rgba(201,169,98,0.1)', fill: true, tension: 0.4 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + (v/1000).toFixed(0) + 'k' } } } }
+      // Revenue vs Expenses
+      charts.revenueExpense = new Chart(document.getElementById('revenueExpenseChart'), {
+        type: 'bar', data: {
+          labels,
+          datasets: [
+            { label: 'Revenue', data: sorted.map(s => parseFloat(s.owner_revenue_share) || 0), backgroundColor: '#c9a962' },
+            { label: 'Expenses', data: sorted.map(s => parseFloat(s.total_expenses) || 0), backgroundColor: '#2d5a6e' }
+          ]
+        },
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + (v/1000).toFixed(0) + 'k' } } }, plugins: { legend: { position: 'bottom' } } }
       });
       
+      // Occupancy donut
       charts.occupancy = new Chart(document.getElementById('occupancyChart'), {
-        type: 'doughnut', data: { labels: ['Owner', 'Guest', 'Rental', 'Vacant'], datasets: [{ data: [t.totalOwnerNights||0, t.totalGuestNights||0, t.totalRentalNights||0, t.totalVacantNights||0], backgroundColor: ['#2d5a6e', '#c9a962', '#4a9e6e', '#ccc'] }] },
+        type: 'doughnut', data: {
+          labels: ['Owner', 'Guest', 'Rental', 'Vacant'],
+          datasets: [{ data: [t.totalOwnerNights||0, t.totalGuestNights||0, t.totalRentalNights||0, t.totalVacantNights||0], backgroundColor: ['#2d5a6e', '#c9a962', '#4a9e6e', '#ccc'] }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+      });
+      
+      // Net Income
+      charts.netIncome = new Chart(document.getElementById('netIncomeChart'), {
+        type: 'bar', data: {
+          labels,
+          datasets: [{ label: 'Net', data: sorted.map(s => (parseFloat(s.owner_revenue_share) || 0) - (parseFloat(s.total_expenses) || 0)), backgroundColor: sorted.map(s => ((parseFloat(s.owner_revenue_share) || 0) - (parseFloat(s.total_expenses) || 0)) >= 0 ? '#4a9e6e' : '#c62828') }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { ticks: { callback: v => '$' + (v/1000).toFixed(0) + 'k' } } }, plugins: { legend: { display: false } } }
+      });
+      
+      // Expense pie
+      if (cats.length) {
+        charts.expensePie = new Chart(document.getElementById('expensePieChart'), {
+          type: 'pie', data: { labels: cats.map(c => c.category), datasets: [{ data: cats.map(c => c.total), backgroundColor: treemapColors }] },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 10 } } } } }
+        });
+      }
+      
+      // ADR Chart
+      const rentalMonths = sorted.filter(s => parseInt(s.rental_nights) > 0);
+      if (rentalMonths.length) {
+        charts.adr = new Chart(document.getElementById('adrChart'), {
+          type: 'bar', data: {
+            labels: rentalMonths.map(s => `${monthNames[s.month]}`),
+            datasets: [{ label: 'ADR', data: rentalMonths.map(s => { const n = parseInt(s.rental_nights) || 1; const g = (parseFloat(s.owner_revenue_share) || 0) * 2; return g / n; }), backgroundColor: '#c9a962' }]
+          },
+          options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: false, ticks: { callback: v => '$' + v.toLocaleString() } } }, plugins: { legend: { display: false } } }
+        });
+      }
+      
+      // Occupancy stacked bar
+      charts.occupancyBar = new Chart(document.getElementById('occupancyBarChart'), {
+        type: 'bar', data: {
+          labels,
+          datasets: [
+            { label: 'Owner', data: sorted.map(s => s.owner_nights || 0), backgroundColor: '#2d5a6e' },
+            { label: 'Guest', data: sorted.map(s => s.guest_nights || 0), backgroundColor: '#c9a962' },
+            { label: 'Rental', data: sorted.map(s => s.rental_nights || 0), backgroundColor: '#4a9e6e' },
+            { label: 'Vacant', data: sorted.map(s => s.vacant_nights || 0), backgroundColor: '#ccc' }
+          ]
+        },
+        options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true, max: 31 } }, plugins: { legend: { position: 'bottom' } } }
+      });
+      
+      // Usage pattern
+      charts.usagePattern = new Chart(document.getElementById('usagePatternChart'), {
+        type: 'line', data: {
+          labels,
+          datasets: [
+            { label: 'Owner+Guest', data: sorted.map(s => (parseInt(s.owner_nights)||0) + (parseInt(s.guest_nights)||0)), borderColor: '#2d5a6e', backgroundColor: 'rgba(45,90,110,0.1)', fill: true, tension: 0.4 },
+            { label: 'Rental', data: sorted.map(s => parseInt(s.rental_nights) || 0), borderColor: '#4a9e6e', backgroundColor: 'rgba(74,158,110,0.1)', fill: true, tension: 0.4 }
+          ]
+        },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
       });
       
-      charts.occupancyBar = new Chart(document.getElementById('occupancyBarChart'), {
-        type: 'bar', data: { labels, datasets: [
-          { label: 'Owner', data: sorted.map(s => s.owner_nights || 0), backgroundColor: '#2d5a6e' },
-          { label: 'Guest', data: sorted.map(s => s.guest_nights || 0), backgroundColor: '#c9a962' },
-          { label: 'Rental', data: sorted.map(s => s.rental_nights || 0), backgroundColor: '#4a9e6e' },
-          { label: 'Vacant', data: sorted.map(s => s.vacant_nights || 0), backgroundColor: '#ccc' }
-        ] },
-        options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true } }, plugins: { legend: { position: 'bottom' } } }
+      // Expense trend
+      charts.expenseTrend = new Chart(document.getElementById('expenseTrendChart'), {
+        type: 'line', data: {
+          labels,
+          datasets: [{ label: 'Expenses', data: sorted.map(s => parseFloat(s.total_expenses) || 0), borderColor: '#c9a962', backgroundColor: 'rgba(201,169,98,0.1)', fill: true, tension: 0.4 }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + (v/1000).toFixed(0) + 'k' } } }, plugins: { legend: { display: false } } }
       });
       
-      if (cats.length) {
-        const colors = ['#1a3a4a', '#2d5a6e', '#c9a962', '#4a9e6e', '#7a6e5e', '#a08060'];
-        charts.expensePie = new Chart(document.getElementById('expensePieChart'), {
-          type: 'pie', data: { labels: cats.map(c => c.category), datasets: [{ data: cats.map(c => c.total), backgroundColor: colors }] },
-          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
-        });
-        const topItems = cats.flatMap(c => c.items).sort((a, b) => b.total - a.total).slice(0, 8);
+      // Top expenses bar
+      const topItems = cats.flatMap(c => c.items).sort((a, b) => b.total - a.total).slice(0, 8);
+      if (topItems.length) {
         charts.expenseBar = new Chart(document.getElementById('expenseBarChart'), {
           type: 'bar', data: { labels: topItems.map(i => i.subcategory), datasets: [{ data: topItems.map(i => i.total), backgroundColor: '#c9a962' }] },
           options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { callback: v => '$' + (v/1000).toFixed(0) + 'k' } } } }
         });
       }
       
-      if (pareto.length) {
-        charts.pareto = new Chart(document.getElementById('paretoChart'), {
-          type: 'bar', data: {
-            labels: pareto.slice(0, 12).map((_, i) => i + 1),
-            datasets: [
-              { type: 'bar', label: 'Amount', data: pareto.slice(0, 12).map(i => i.total), backgroundColor: pareto.slice(0, 12).map(i => i.cumulativePct <= 80 ? '#c9a962' : '#ddd'), yAxisID: 'y' },
-              { type: 'line', label: 'Cumulative %', data: pareto.slice(0, 12).map(i => i.cumulativePct), borderColor: '#1a3a4a', yAxisID: 'y1', tension: 0.4 }
-            ]
+      // Revenue bar
+      charts.revenueBar = new Chart(document.getElementById('revenueBarChart'), {
+        type: 'bar', data: {
+          labels,
+          datasets: [{ label: 'Revenue', data: sorted.map(s => parseFloat(s.owner_revenue_share) || 0), backgroundColor: sorted.map(s => parseFloat(s.owner_revenue_share) > 0 ? '#c9a962' : '#eee') }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + (v/1000).toFixed(0) + 'k' } } }, plugins: { legend: { display: false } } }
+      });
+      
+      // ADR vs Nights
+      if (rentalMonths.length) {
+        charts.adrVsNights = new Chart(document.getElementById('adrVsNightsChart'), {
+          type: 'scatter', data: {
+            datasets: [{
+              label: 'Months',
+              data: rentalMonths.map(s => {
+                const n = parseInt(s.rental_nights) || 0;
+                const g = (parseFloat(s.owner_revenue_share) || 0) * 2;
+                return { x: n, y: n > 0 ? g / n : 0 };
+              }),
+              backgroundColor: '#c9a962',
+              pointRadius: 8
+            }]
           },
-          options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true }, y1: { position: 'right', min: 0, max: 100, ticks: { callback: v => v + '%' } } }, plugins: { legend: { position: 'bottom' } } }
+          options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: 'Rental Nights' } }, y: { title: { display: true, text: 'ADR ($)' }, ticks: { callback: v => '$' + v.toLocaleString() } } }, plugins: { legend: { display: false } } }
         });
       }
+    }
+
+    // Chat
+    function toggleChat() {
+      const panel = document.getElementById('chatPanel');
+      const fab = document.getElementById('chatFab');
+      panel.classList.toggle('open');
+      fab.classList.toggle('open');
+      fab.textContent = panel.classList.contains('open') ? '✕' : '💬';
     }
 
     async function sendChat() {
       const input = document.getElementById('chatInput');
       const question = input.value.trim();
       if (!question) return;
+      
       const messagesEl = document.getElementById('chatMessages');
       messagesEl.innerHTML += `<div class="chat-message user"><div class="bubble">${question}</div></div>`;
       input.value = '';
@@ -565,6 +736,7 @@
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
+    // Tabs
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -574,6 +746,7 @@
       });
     });
 
+    // Upload
     const uploadZone = document.getElementById('uploadZone');
     const fileInput = document.getElementById('fileInput');
     const uploadStatus = document.getElementById('uploadStatus');
@@ -604,46 +777,30 @@
           uploadStatus.className = 'upload-status success'; 
           uploadStatus.textContent = `✓ ${data.message}`;
           
-          // Show parsed months
           if (data.months && data.months.length > 0) {
-            const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
             let html = '<table class="data-table" style="font-size:0.75rem;"><thead><tr><th>Month</th><th class="r">Owner</th><th class="r">Guest</th><th class="r">Rental</th><th class="r">Vacant</th><th class="r">Revenue</th><th class="r">Expenses</th></tr></thead><tbody>';
             for (const m of data.months) {
-              html += `<tr><td>${monthNames[m.month]} ${m.year}</td><td class="r">${m.owner}</td><td class="r">${m.guest}</td><td class="r">${m.rental}</td><td class="r">${m.vacant}</td><td class="r">$${m.revenue.toLocaleString()}</td><td class="r">$${m.expenses.toLocaleString()}</td></tr>`;
+              html += `<tr><td>${monthNames[m.month]} ${m.year}</td><td class="r">${m.owner}</td><td class="r">${m.guest}</td><td class="r">${m.rental}</td><td class="r">${m.vacant}</td><td class="r">${fmt(m.revenue)}</td><td class="r">${fmt(m.expenses)}</td></tr>`;
             }
             html += '</tbody></table>';
             document.getElementById('uploadResults').innerHTML = html;
           }
-          
           await loadInitialData(); 
         }
-        else { 
-          uploadStatus.className = 'upload-status error'; 
-          uploadStatus.textContent = data.error || 'Failed'; 
-        }
-      } catch (err) { 
-        uploadStatus.className = 'upload-status error'; 
-        uploadStatus.textContent = 'Upload failed: ' + err.message; 
-      }
+        else { uploadStatus.className = 'upload-status error'; uploadStatus.textContent = data.error || 'Failed'; }
+      } catch (err) { uploadStatus.className = 'upload-status error'; uploadStatus.textContent = 'Upload failed: ' + err.message; }
       fileInput.value = '';
     }
 
     async function clearAllData() {
-      if (!confirm('Are you sure you want to delete ALL data? This cannot be undone.')) return;
-      if (!confirm('Really delete everything? You will need to re-upload your Excel file.')) return;
-      
+      if (!confirm('Delete ALL data? This cannot be undone.')) return;
+      if (!confirm('Really delete everything?')) return;
       try {
         const res = await fetch('/api/statements/all', { method: 'DELETE' });
         const data = await res.json();
-        if (data.success) {
-          alert('All data cleared. Please upload your Excel file.');
-          await loadInitialData();
-        } else {
-          alert('Failed to clear data: ' + data.error);
-        }
-      } catch (err) {
-        alert('Error: ' + err.message);
-      }
+        if (data.success) { alert('All data cleared. Upload your Excel file.'); await loadInitialData(); }
+        else { alert('Failed: ' + data.error); }
+      } catch (err) { alert('Error: ' + err.message); }
     }
 
     checkAuth();
