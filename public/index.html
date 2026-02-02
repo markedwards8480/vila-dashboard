@@ -19,13 +19,13 @@
     .login-logo span { font-size: 0.85rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.3em; }
     .form-group { margin-bottom: 1.5rem; }
     .form-group label { display: block; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-light); margin-bottom: 0.5rem; }
-    .form-group input, .form-group select { width: 100%; padding: 0.85rem 1rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 10px; font-family: inherit; font-size: 0.95rem; background: white; }
+    .form-group input { width: 100%; padding: 0.85rem 1rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 10px; font-family: inherit; font-size: 0.95rem; background: white; }
     .btn { padding: 0.85rem 1.5rem; border: none; border-radius: 10px; font-family: inherit; font-size: 0.85rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; cursor: pointer; transition: all 0.2s; }
     .btn-primary { background: var(--primary); color: white; }
     .btn-primary:hover { background: var(--primary-light); }
     .btn-sm { padding: 0.5rem 1rem; font-size: 0.75rem; }
     .btn-outline { background: white; border: 1px solid rgba(0,0,0,0.15); color: var(--text); }
-    .btn-outline:hover { background: var(--primary); color: white; border-color: var(--primary); }
+    .btn-outline:hover { background: var(--primary); color: white; }
     .error-message { background: #fee; color: #c00; padding: 0.75rem; border-radius: 8px; margin-bottom: 1rem; display: none; }
     
     .dashboard { display: none; min-height: 100vh; }
@@ -37,7 +37,6 @@
     .header-brand h1 { font-size: 1.4rem; color: var(--primary); }
     .header-brand span { font-size: 0.65rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.2em; background: rgba(201,169,98,0.15); padding: 0.3rem 0.6rem; border-radius: 4px; }
     .header-btn { padding: 0.4rem 0.8rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 6px; background: transparent; font-family: inherit; font-size: 0.75rem; cursor: pointer; }
-    .header-btn:hover { background: var(--primary); color: white; }
     
     .main-content { padding: 1.5rem 2rem; max-width: 1900px; margin: 0 auto; }
     
@@ -55,7 +54,7 @@
     .month-chip.selected .check { background: white; border-color: white; color: var(--primary); }
     
     .tabs { display: flex; gap: 0.35rem; margin-bottom: 1.25rem; background: var(--card-bg); border-radius: 10px; padding: 0.4rem; box-shadow: var(--shadow); flex-wrap: wrap; }
-    .tab-btn { padding: 0.6rem 1rem; border: none; border-radius: 6px; font-family: inherit; font-size: 0.75rem; font-weight: 500; color: var(--text-light); background: transparent; cursor: pointer; transition: all 0.2s; }
+    .tab-btn { padding: 0.6rem 1rem; border: none; border-radius: 6px; font-family: inherit; font-size: 0.75rem; font-weight: 500; color: var(--text-light); background: transparent; cursor: pointer; }
     .tab-btn:hover { color: var(--primary); }
     .tab-btn.active { background: var(--primary); color: white; }
     .tab-content { display: none; }
@@ -102,50 +101,42 @@
     .data-table tr.total { background: var(--primary); color: white; }
     .data-table tr.total td { padding: 0.7rem 0.5rem; font-weight: 600; }
     .data-table tr.highlight { background: rgba(201,169,98,0.15); }
-    
     .pct-bar { display: inline-block; height: 6px; background: var(--accent); border-radius: 3px; vertical-align: middle; }
-    .pct-bar.cumulative { background: var(--primary); }
     
-    .insight-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .insight-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
     .insight { background: var(--card-bg); border-radius: 10px; padding: 1rem; box-shadow: var(--shadow); }
     .insight-title { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-light); margin-bottom: 0.3rem; }
-    .insight-value { font-family: 'Cormorant Garamond', serif; font-size: 1.15rem; color: var(--primary); }
+    .insight-value { font-family: 'Cormorant Garamond', serif; font-size: 1.1rem; color: var(--primary); }
     .insight-detail { font-size: 0.7rem; color: var(--text-light); margin-top: 0.2rem; }
     
     .heatmap { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
     .heatmap th, .heatmap td { padding: 0.4rem 0.5rem; text-align: center; border: 1px solid rgba(0,0,0,0.04); }
-    .heatmap th { background: var(--primary); color: white; font-size: 0.65rem; font-weight: 500; }
+    .heatmap th { background: var(--primary); color: white; font-size: 0.65rem; }
     .heatmap th:first-child, .heatmap td:first-child { text-align: left; min-width: 120px; }
     .heatmap td:first-child { font-weight: 500; background: rgba(0,0,0,0.02); }
     .heat-0 { background: #f8f8f8; } .heat-1 { background: #fff8e1; } .heat-2 { background: #ffecb3; } .heat-3 { background: #ffe082; } .heat-4 { background: #ffd54f; } .heat-5 { background: #ffca28; }
     
-    .chat-container { display: flex; flex-direction: column; height: 420px; }
+    .chat-container { display: flex; flex-direction: column; height: 400px; }
     .chat-messages { flex: 1; overflow-y: auto; padding: 1rem; background: #f9f9f9; border-radius: 8px; margin-bottom: 1rem; }
     .chat-message { margin-bottom: 1rem; max-width: 85%; }
     .chat-message.user { margin-left: auto; }
     .chat-message .bubble { padding: 0.75rem 1rem; border-radius: 12px; font-size: 0.85rem; line-height: 1.5; }
-    .chat-message.user .bubble { background: var(--primary); color: white; border-bottom-right-radius: 4px; }
-    .chat-message.ai .bubble { background: white; border: 1px solid rgba(0,0,0,0.1); border-bottom-left-radius: 4px; }
-    .chat-message .meta { font-size: 0.6rem; color: var(--text-light); margin-top: 0.2rem; }
-    .chat-message.user .meta { text-align: right; }
+    .chat-message.user .bubble { background: var(--primary); color: white; }
+    .chat-message.ai .bubble { background: white; border: 1px solid rgba(0,0,0,0.1); }
     .chat-input-area { display: flex; gap: 0.75rem; }
     .chat-input-area input { flex: 1; padding: 0.75rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; font-family: inherit; }
     
     .upload-zone { border: 2px dashed rgba(0,0,0,0.15); border-radius: 12px; padding: 2rem; text-align: center; cursor: pointer; }
     .upload-zone:hover { border-color: var(--accent); background: rgba(201,169,98,0.05); }
-    .upload-icon { font-size: 2rem; margin-bottom: 0.5rem; opacity: 0.5; }
-    .upload-text { color: var(--text-light); font-size: 0.85rem; }
-    .upload-text strong { color: var(--accent); }
-    .file-input { display: none; }
     .upload-status { margin-top: 1rem; padding: 0.75rem; border-radius: 6px; display: none; font-size: 0.8rem; }
     .upload-status.success { display: block; background: #e8f5e9; color: var(--success); }
     .upload-status.error { display: block; background: #ffebee; color: var(--danger); }
     .upload-status.loading { display: block; background: #e3f2fd; color: #1565c0; }
-    .file-list { max-height: 150px; overflow-y: auto; margin-top: 1rem; }
-    .file-item { display: flex; justify-content: space-between; padding: 0.35rem 0; border-bottom: 1px solid rgba(0,0,0,0.04); font-size: 0.75rem; }
+    .file-input { display: none; }
+    .file-list { margin-top: 1rem; font-size: 0.75rem; }
+    .file-item { display: flex; justify-content: space-between; padding: 0.35rem 0; border-bottom: 1px solid rgba(0,0,0,0.04); }
     
     @media (max-width: 1000px) { .grid-2 { grid-template-columns: 1fr; } .occ-grid { grid-template-columns: repeat(2, 1fr); } }
-    @media (max-width: 600px) { .occ-grid { grid-template-columns: 1fr 1fr; } .kpi-grid { grid-template-columns: 1fr 1fr; } }
   </style>
 </head>
 <body>
@@ -171,9 +162,7 @@
       <div class="view-selector">
         <div class="view-header">
           <label>Quick Select:</label>
-          <select id="quickSelect" onchange="quickSelectChange()">
-            <option value="">-- Choose --</option>
-          </select>
+          <select id="quickSelect" onchange="quickSelectChange()"><option value="">--</option></select>
           <button class="btn btn-outline btn-sm" onclick="selectAll()">All</button>
           <button class="btn btn-outline btn-sm" onclick="selectNone()">None</button>
           <span class="view-info" id="viewInfo">No months selected</span>
@@ -195,9 +184,9 @@
         <div class="kpi-grid">
           <div class="kpi"><div class="kpi-label">Current Balance</div><div class="kpi-value" id="kpiBalance">--</div></div>
           <div class="kpi"><div class="kpi-label">Total Expenses</div><div class="kpi-value accent" id="kpiExpenses">--</div><div class="kpi-sub" id="kpiExpPct"></div></div>
-          <div class="kpi"><div class="kpi-label">Owner Revenue</div><div class="kpi-value accent" id="kpiRevenue">--</div></div>
+          <div class="kpi"><div class="kpi-label">Owner Revenue (50%)</div><div class="kpi-value accent" id="kpiRevenue">--</div></div>
           <div class="kpi"><div class="kpi-label">Net Income</div><div class="kpi-value" id="kpiNet">--</div></div>
-          <div class="kpi"><div class="kpi-label">Total Nights</div><div class="kpi-value" id="kpiNights">--</div><div class="kpi-sub" id="kpiOccRate"></div></div>
+          <div class="kpi"><div class="kpi-label">Occupied Nights</div><div class="kpi-value" id="kpiOccupied">--</div><div class="kpi-sub" id="kpiOccRate"></div></div>
           <div class="kpi"><div class="kpi-label">Cost/Occupied Night</div><div class="kpi-value" id="kpiCostNight">--</div></div>
         </div>
         <div class="insight-grid">
@@ -232,11 +221,7 @@
       </div>
 
       <div class="tab-content" id="tab-pareto">
-        <div class="card">
-          <h3>80/20 Pareto Analysis</h3>
-          <p style="font-size:0.75rem;color:var(--text-light);margin-bottom:1rem;">Items highlighted = ~80% of costs</p>
-          <div id="paretoTableContainer"></div>
-        </div>
+        <div class="card"><h3>80/20 Pareto Analysis</h3><p style="font-size:0.75rem;color:var(--text-light);margin-bottom:1rem;">Highlighted items = ~80% of costs</p><div id="paretoTableContainer"></div></div>
         <div class="card"><h3>Cumulative Distribution</h3><div class="chart-container" style="height:280px;"><canvas id="paretoChart"></canvas></div></div>
       </div>
 
@@ -247,13 +232,12 @@
       <div class="tab-content" id="tab-ai">
         <div class="card">
           <h3>AI Assistant</h3>
-          <p style="font-size:0.75rem;color:var(--text-light);margin-bottom:1rem;">Ask questions about your villa finances</p>
           <div class="chat-container">
             <div class="chat-messages" id="chatMessages">
-              <div class="chat-message ai"><div class="bubble">Hello! Ask me about your villa finances:<br>• "What month had highest payroll?"<br>• "Compare Nov vs Dec expenses"<br>• "What's driving costs?"</div></div>
+              <div class="chat-message ai"><div class="bubble">Ask me about your villa finances!</div></div>
             </div>
             <div class="chat-input-area">
-              <input type="text" id="chatInput" placeholder="Ask about your villa data..." onkeypress="if(event.key==='Enter')sendChat()">
+              <input type="text" id="chatInput" placeholder="Ask a question..." onkeypress="if(event.key==='Enter')sendChat()">
               <button class="btn btn-primary btn-sm" onclick="sendChat()">Send</button>
             </div>
           </div>
@@ -261,16 +245,25 @@
       </div>
 
       <div class="tab-content" id="tab-upload">
-        <div class="card" style="max-width:500px;">
-          <h3>Upload Statement</h3>
-          <div class="upload-zone" id="uploadZone">
-            <div class="upload-icon">📄</div>
-            <p class="upload-text"><strong>Click to upload</strong> or drag & drop</p>
-            <p class="upload-text">Amanyara Statement PDF</p>
+        <div class="grid-2">
+          <div class="card">
+            <h3>Upload Excel Statement</h3>
+            <div class="upload-zone" id="uploadZone">
+              <p style="font-size:2rem;opacity:0.5;">📊</p>
+              <p style="color:var(--accent);font-weight:500;">Click to upload</p>
+              <p style="color:var(--text-light);font-size:0.85rem;">Amanyara YTD Excel file (.xlsx)</p>
+              <p style="color:var(--text-light);font-size:0.75rem;margin-top:0.5rem;">One file contains all months!</p>
+            </div>
+            <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls">
+            <div class="upload-status" id="uploadStatus"></div>
+            <div id="uploadResults" style="margin-top:1rem;"></div>
           </div>
-          <input type="file" id="fileInput" class="file-input" accept=".pdf">
-          <div class="upload-status" id="uploadStatus"></div>
-          <div class="file-list" id="fileList"></div>
+          <div class="card">
+            <h3>Data Management</h3>
+            <p style="color:var(--text-light);font-size:0.85rem;margin-bottom:1rem;">Clear all existing data before uploading a fresh Excel file.</p>
+            <button class="btn btn-outline" onclick="clearAllData()" style="background:#fee;border-color:#c00;color:#c00;">🗑️ Clear All Data</button>
+            <div class="file-list" id="fileList" style="margin-top:1.5rem;"><h4 style="font-size:0.75rem;color:var(--text-light);margin-bottom:0.5rem;">Recent Uploads</h4></div>
+          </div>
         </div>
       </div>
     </main>
@@ -322,22 +315,17 @@
       availableYears = data.availableYears || [];
       buildMonthGrid();
       buildQuickSelect();
-      // Select most recent by default
-      if (allStatements.length > 0) {
-        toggleMonth(allStatements[0].id);
-      }
+      if (allStatements.length > 0) toggleMonth(allStatements[0].id);
     }
 
     function buildQuickSelect() {
-      const select = document.getElementById('quickSelect');
-      select.innerHTML = `<option value="">-- Quick Select --</option>
+      document.getElementById('quickSelect').innerHTML = `<option value="">-- Quick Select --</option>
         ${availableYears.map(y => `<option value="year-${y}">All of ${y}</option>`).join('')}
         <option value="rolling12">Rolling 12 Months</option>`;
     }
 
     function buildMonthGrid() {
-      const grid = document.getElementById('monthGrid');
-      grid.innerHTML = allStatements.map(s => `
+      document.getElementById('monthGrid').innerHTML = allStatements.map(s => `
         <div class="month-chip" data-id="${s.id}" onclick="toggleMonth(${s.id})">
           <span class="check">✓</span>
           <span>${monthNames[s.month]} ${s.year}</span>
@@ -346,43 +334,24 @@
     }
 
     function toggleMonth(id) {
-      if (selectedIds.has(id)) {
-        selectedIds.delete(id);
-      } else {
-        selectedIds.add(id);
-      }
+      selectedIds.has(id) ? selectedIds.delete(id) : selectedIds.add(id);
       updateChipStyles();
       loadSelectedData();
-      document.getElementById('quickSelect').value = '';
     }
 
     function updateChipStyles() {
       document.querySelectorAll('.month-chip').forEach(chip => {
-        const id = parseInt(chip.dataset.id);
-        chip.classList.toggle('selected', selectedIds.has(id));
+        chip.classList.toggle('selected', selectedIds.has(parseInt(chip.dataset.id)));
       });
     }
 
-    function selectAll() {
-      selectedIds = new Set(allStatements.map(s => s.id));
-      updateChipStyles();
-      loadSelectedData();
-      document.getElementById('quickSelect').value = '';
-    }
-
-    function selectNone() {
-      selectedIds.clear();
-      updateChipStyles();
-      document.getElementById('viewInfo').textContent = 'No months selected';
-      dashboardData = null;
-    }
+    function selectAll() { selectedIds = new Set(allStatements.map(s => s.id)); updateChipStyles(); loadSelectedData(); }
+    function selectNone() { selectedIds.clear(); updateChipStyles(); document.getElementById('viewInfo').textContent = 'No months selected'; dashboardData = null; }
 
     function quickSelectChange() {
       const mode = document.getElementById('quickSelect').value;
       if (!mode) return;
-      
       if (mode === 'rolling12') {
-        // Select last 12 months
         const sorted = [...allStatements].sort((a, b) => b.year - a.year || b.month - a.month);
         selectedIds = new Set(sorted.slice(0, 12).map(s => s.id));
       } else if (mode.startsWith('year-')) {
@@ -394,12 +363,8 @@
     }
 
     async function loadSelectedData() {
-      if (selectedIds.size === 0) {
-        document.getElementById('viewInfo').textContent = 'No months selected';
-        return;
-      }
-      const ids = Array.from(selectedIds);
-      const res = await fetch('/api/dashboard?ids=' + ids.join(','));
+      if (selectedIds.size === 0) { document.getElementById('viewInfo').textContent = 'No months selected'; return; }
+      const res = await fetch('/api/dashboard?ids=' + Array.from(selectedIds).join(','));
       dashboardData = await res.json();
       document.getElementById('viewInfo').textContent = `${dashboardData.statements.length} month(s) selected`;
       updateDisplay();
@@ -413,6 +378,10 @@
       const t = dashboardData.totals || {};
       const ins = dashboardData.insights || {};
       
+      // CORRECT: Occupied = Owner + Guest + Rental (NOT vacant)
+      const occupiedNights = (t.totalOwnerNights||0) + (t.totalGuestNights||0) + (t.totalRentalNights||0);
+      const totalNights = occupiedNights + (t.totalVacantNights||0);
+      
       document.getElementById('kpiBalance').textContent = fmt(t.totalBalance);
       document.getElementById('kpiExpenses').textContent = fmt(t.totalExpenses);
       document.getElementById('kpiRevenue').textContent = fmt(t.totalRevenue);
@@ -422,11 +391,9 @@
       netEl.textContent = fmt(net);
       netEl.className = 'kpi-value ' + (net >= 0 ? 'success' : 'danger');
       
-      const totalNights = (t.totalOwnerNights||0) + (t.totalGuestNights||0) + (t.totalRentalNights||0) + (t.totalVacantNights||0);
-      const occupied = (t.totalOwnerNights||0) + (t.totalGuestNights||0) + (t.totalRentalNights||0);
-      document.getElementById('kpiNights').textContent = totalNights;
-      document.getElementById('kpiOccRate').textContent = totalNights > 0 ? `${(occupied/totalNights*100).toFixed(0)}% occupied` : '';
-      document.getElementById('kpiCostNight').textContent = occupied > 0 ? fmt(t.totalExpenses / occupied) : '--';
+      document.getElementById('kpiOccupied').textContent = occupiedNights;
+      document.getElementById('kpiOccRate').textContent = totalNights > 0 ? `${(occupiedNights/totalNights*100).toFixed(0)}% occupancy` : '';
+      document.getElementById('kpiCostNight').textContent = occupiedNights > 0 ? fmt(t.totalExpenses / occupiedNights) : '--';
       document.getElementById('kpiExpPct').textContent = t.totalRevenue > 0 ? `${(t.totalExpenses/t.totalRevenue*100).toFixed(0)}% of revenue` : '';
       
       document.getElementById('insHighExp').textContent = ins.highestExpenseMonth || '--';
@@ -456,7 +423,7 @@
     function updateTables() {
       const cats = dashboardData.expensesByCategory || [];
       const expContainer = document.getElementById('expenseTableContainer');
-      if (!cats.length) { expContainer.innerHTML = '<p style="color:var(--text-light)">No data</p>'; }
+      if (!cats.length) { expContainer.innerHTML = '<p style="color:var(--text-light)">No expense data</p>'; }
       else {
         const total = cats.reduce((s, c) => s + c.total, 0);
         let html = `<table class="data-table"><thead><tr><th>Category / Item</th><th class="r">Amount</th><th class="r">%</th><th style="width:100px"></th></tr></thead><tbody>`;
@@ -472,10 +439,10 @@
       const paretoContainer = document.getElementById('paretoTableContainer');
       if (!items.length) { paretoContainer.innerHTML = '<p style="color:var(--text-light)">No data</p>'; }
       else {
-        let html = `<table class="data-table"><thead><tr><th>#</th><th>Item</th><th>Category</th><th class="r">Amount</th><th class="r">%</th><th class="r">Cumul.</th><th style="width:80px"></th></tr></thead><tbody>`;
+        let html = `<table class="data-table"><thead><tr><th>#</th><th>Item</th><th>Category</th><th class="r">Amount</th><th class="r">%</th><th class="r">Cumul.</th></tr></thead><tbody>`;
         items.forEach((item, i) => {
           const hl = item.cumulativePct <= 80 ? ' highlight' : '';
-          html += `<tr class="${hl}"><td>${i+1}</td><td>${item.name}</td><td style="color:var(--text-light)">${item.category}</td><td class="r">${fmt(item.total)}</td><td class="r">${item.pctOfTotal.toFixed(1)}%</td><td class="r"><strong>${item.cumulativePct.toFixed(0)}%</strong></td><td><span class="pct-bar cumulative" style="width:${item.cumulativePct}%"></span></td></tr>`;
+          html += `<tr class="${hl}"><td>${i+1}</td><td>${item.name}</td><td style="color:var(--text-light)">${item.category}</td><td class="r">${fmt(item.total)}</td><td class="r">${item.pctOfTotal.toFixed(1)}%</td><td class="r"><strong>${item.cumulativePct.toFixed(0)}%</strong></td></tr>`;
         });
         html += `</tbody></table>`;
         paretoContainer.innerHTML = html;
@@ -492,7 +459,6 @@
         html += `<tr><td>Guest</td>${sorted.map(s => { totals.g += s.guest_nights || 0; return `<td class="r">${s.guest_nights || 0}</td>`; }).join('')}<td class="r"><strong>${totals.g}</strong></td></tr>`;
         html += `<tr><td>Rental</td>${sorted.map(s => { totals.r += s.rental_nights || 0; return `<td class="r">${s.rental_nights || 0}</td>`; }).join('')}<td class="r"><strong>${totals.r}</strong></td></tr>`;
         html += `<tr><td>Vacant</td>${sorted.map(s => { totals.v += s.vacant_nights || 0; return `<td class="r">${s.vacant_nights || 0}</td>`; }).join('')}<td class="r"><strong>${totals.v}</strong></td></tr>`;
-        html += `<tr class="total"><td>Total</td>${sorted.map(s => `<td class="r">${(s.owner_nights||0)+(s.guest_nights||0)+(s.rental_nights||0)+(s.vacant_nights||0)}</td>`).join('')}<td class="r"><strong>${totals.o+totals.g+totals.r+totals.v}</strong></td></tr>`;
         html += `</tbody></table>`;
         occContainer.innerHTML = html;
       }
@@ -513,14 +479,14 @@
         heatContainer.innerHTML = html;
       }
       
-      updateRecentFiles();
+      const files = dashboardData?.recentFiles || [];
+      document.getElementById('fileList').innerHTML = files.length ? files.slice(0, 8).map(f => `<div class="file-item"><span>${f.filename}</span><span style="color:var(--text-light)">${new Date(f.upload_date).toLocaleDateString()}</span></div>`).join('') : '';
     }
 
     function updateCharts() {
       Object.values(charts).forEach(c => c.destroy());
       charts = {};
       if (!dashboardData) return;
-      
       const stmts = dashboardData.statements || [];
       const t = dashboardData.totals || {};
       const cats = dashboardData.expensesByCategory || [];
@@ -569,17 +535,12 @@
             labels: pareto.slice(0, 12).map((_, i) => i + 1),
             datasets: [
               { type: 'bar', label: 'Amount', data: pareto.slice(0, 12).map(i => i.total), backgroundColor: pareto.slice(0, 12).map(i => i.cumulativePct <= 80 ? '#c9a962' : '#ddd'), yAxisID: 'y' },
-              { type: 'line', label: 'Cumulative %', data: pareto.slice(0, 12).map(i => i.cumulativePct), borderColor: '#1a3a4a', backgroundColor: 'transparent', yAxisID: 'y1', tension: 0.4 }
+              { type: 'line', label: 'Cumulative %', data: pareto.slice(0, 12).map(i => i.cumulativePct), borderColor: '#1a3a4a', yAxisID: 'y1', tension: 0.4 }
             ]
           },
-          options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + (v/1000).toFixed(0) + 'k' } }, y1: { position: 'right', min: 0, max: 100, ticks: { callback: v => v + '%' } } }, plugins: { legend: { position: 'bottom' } } }
+          options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true }, y1: { position: 'right', min: 0, max: 100, ticks: { callback: v => v + '%' } } }, plugins: { legend: { position: 'bottom' } } }
         });
       }
-    }
-
-    function updateRecentFiles() {
-      const files = dashboardData?.recentFiles || [];
-      document.getElementById('fileList').innerHTML = files.length ? files.slice(0, 8).map(f => `<div class="file-item"><span>${f.filename}</span><span style="color:var(--text-light)">${new Date(f.upload_date).toLocaleDateString()}</span></div>`).join('') : '<p style="color:var(--text-light);font-size:0.75rem">No uploads</p>';
     }
 
     async function sendChat() {
@@ -587,19 +548,19 @@
       const question = input.value.trim();
       if (!question) return;
       const messagesEl = document.getElementById('chatMessages');
-      messagesEl.innerHTML += `<div class="chat-message user"><div class="bubble">${question}</div><div class="meta">You</div></div>`;
+      messagesEl.innerHTML += `<div class="chat-message user"><div class="bubble">${question}</div></div>`;
       input.value = '';
-      messagesEl.innerHTML += `<div class="chat-message ai" id="typing"><div class="bubble" style="color:var(--text-light)">Thinking...</div></div>`;
+      messagesEl.innerHTML += `<div class="chat-message ai" id="typing"><div class="bubble" style="opacity:0.5">Thinking...</div></div>`;
       messagesEl.scrollTop = messagesEl.scrollHeight;
       
       try {
         const res = await fetch('/api/ai/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question }) });
         const data = await res.json();
         document.getElementById('typing')?.remove();
-        messagesEl.innerHTML += `<div class="chat-message ai"><div class="bubble">${data.error ? `<span style="color:var(--danger)">${data.error}</span>` : data.answer.replace(/\n/g, '<br>')}</div><div class="meta">AI</div></div>`;
+        messagesEl.innerHTML += `<div class="chat-message ai"><div class="bubble">${data.error || data.answer.replace(/\n/g, '<br>')}</div></div>`;
       } catch (err) {
         document.getElementById('typing')?.remove();
-        messagesEl.innerHTML += `<div class="chat-message ai"><div class="bubble" style="color:var(--danger)">Error: ${err.message}</div></div>`;
+        messagesEl.innerHTML += `<div class="chat-message ai"><div class="bubble">Error: ${err.message}</div></div>`;
       }
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
@@ -623,21 +584,66 @@
     fileInput.onchange = () => { if (fileInput.files.length) handleUpload(fileInput.files[0]); };
 
     async function handleUpload(file) {
-      if (!file.name.toLowerCase().endsWith('.pdf')) { uploadStatus.className = 'upload-status error'; uploadStatus.textContent = 'Please upload a PDF'; return; }
-      uploadStatus.className = 'upload-status loading'; uploadStatus.textContent = 'Processing...';
-      const formData = new FormData(); formData.append('file', file);
+      if (!file.name.toLowerCase().match(/\.xlsx?$/)) { 
+        uploadStatus.className = 'upload-status error'; 
+        uploadStatus.textContent = 'Please upload an Excel file (.xlsx)'; 
+        return; 
+      }
+      uploadStatus.className = 'upload-status loading'; 
+      uploadStatus.textContent = 'Processing Excel file...';
+      document.getElementById('uploadResults').innerHTML = '';
+      
+      const formData = new FormData(); 
+      formData.append('file', file);
+      
       try {
         const res = await fetch('/api/upload', { method: 'POST', body: formData });
         const data = await res.json();
+        
         if (data.success) { 
-          const occ = data.parsed?.occupancy || {};
           uploadStatus.className = 'upload-status success'; 
-          uploadStatus.textContent = `✓ ${file.name} - Owner:${occ.ownerNights||0} Guest:${occ.guestNights||0} Rental:${occ.rentalNights||0} Vacant:${occ.vacantNights||0}`; 
+          uploadStatus.textContent = `✓ ${data.message}`;
+          
+          // Show parsed months
+          if (data.months && data.months.length > 0) {
+            const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            let html = '<table class="data-table" style="font-size:0.75rem;"><thead><tr><th>Month</th><th class="r">Owner</th><th class="r">Guest</th><th class="r">Rental</th><th class="r">Vacant</th><th class="r">Revenue</th><th class="r">Expenses</th></tr></thead><tbody>';
+            for (const m of data.months) {
+              html += `<tr><td>${monthNames[m.month]} ${m.year}</td><td class="r">${m.owner}</td><td class="r">${m.guest}</td><td class="r">${m.rental}</td><td class="r">${m.vacant}</td><td class="r">$${m.revenue.toLocaleString()}</td><td class="r">$${m.expenses.toLocaleString()}</td></tr>`;
+            }
+            html += '</tbody></table>';
+            document.getElementById('uploadResults').innerHTML = html;
+          }
+          
           await loadInitialData(); 
         }
-        else { uploadStatus.className = 'upload-status error'; uploadStatus.textContent = data.error || 'Failed'; }
-      } catch (err) { uploadStatus.className = 'upload-status error'; uploadStatus.textContent = 'Upload failed'; }
+        else { 
+          uploadStatus.className = 'upload-status error'; 
+          uploadStatus.textContent = data.error || 'Failed'; 
+        }
+      } catch (err) { 
+        uploadStatus.className = 'upload-status error'; 
+        uploadStatus.textContent = 'Upload failed: ' + err.message; 
+      }
       fileInput.value = '';
+    }
+
+    async function clearAllData() {
+      if (!confirm('Are you sure you want to delete ALL data? This cannot be undone.')) return;
+      if (!confirm('Really delete everything? You will need to re-upload your Excel file.')) return;
+      
+      try {
+        const res = await fetch('/api/statements/all', { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+          alert('All data cleared. Please upload your Excel file.');
+          await loadInitialData();
+        } else {
+          alert('Failed to clear data: ' + data.error);
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
     }
 
     checkAuth();
