@@ -4,577 +4,749 @@ const multer = require('multer');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
-const XLSX = require('xlsx');
+const pdfParse = require('pdf-parse');
+const path = require('path');
+const fs = require('fs');
+const Anthropic = require('@anthropic-ai/sdk');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Database connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
-async function initDB() {
+// Anthropic client
+const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY
+}) : null;
+
+// Middleware
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// Trust proxy for Railway
+app.set('trust proxy', 1);
+
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'villa-dashboard-secret-key-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { 
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 24 * 60 * 60 * 1000
+  }
+}));
+
+// Serve static files
+app.use(express.static(path.join(__dirname, 'public')));
+
+// File upload configuration
+const storage = multer.memoryStorage();
+const upload = multer({ 
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024 }
+});
+
+// Initialize database
+async function initDatabase() {
+  const client = await pool.connect();
   try {
-    await pool.query(`CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, username VARCHAR(255) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
-    await pool.query(`CREATE TABLE IF NOT EXISTS monthly_statements (id SERIAL PRIMARY KEY, statement_date DATE NOT NULL, year INTEGER NOT NULL, month INTEGER NOT NULL, filename VARCHAR(255), closing_balance DECIMAL(12,2), total_expenses DECIMAL(12,2), owner_revenue_share DECIMAL(12,2), rental_revenue DECIMAL(12,2), occupancy JSONB, expenses JSONB, utilities JSONB, monthly_data JSONB, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(year, month))`);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      
+      CREATE TABLE IF NOT EXISTS monthly_statements (
+        id SERIAL PRIMARY KEY,
+        statement_date DATE NOT NULL,
+        year INTEGER NOT NULL,
+        month INTEGER NOT NULL,
+        opening_balance DECIMAL(12,2),
+        closing_balance DECIMAL(12,2),
+        total_charges DECIMAL(12,2),
+        total_payments DECIMAL(12,2),
+        owner_nights INTEGER DEFAULT 0,
+        guest_nights INTEGER DEFAULT 0,
+        rental_nights INTEGER DEFAULT 0,
+        vacant_nights INTEGER DEFAULT 0,
+        rental_revenue DECIMAL(12,2) DEFAULT 0,
+        owner_revenue_share DECIMAL(12,2) DEFAULT 0,
+        raw_data JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(year, month)
+      );
+      
+      CREATE TABLE IF NOT EXISTS expense_categories (
+        id SERIAL PRIMARY KEY,
+        statement_id INTEGER REFERENCES monthly_statements(id) ON DELETE CASCADE,
+        category VARCHAR(255) NOT NULL,
+        subcategory VARCHAR(255),
+        amount DECIMAL(12,2) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      
+      CREATE TABLE IF NOT EXISTS utility_readings (
+        id SERIAL PRIMARY KEY,
+        statement_id INTEGER REFERENCES monthly_statements(id) ON DELETE CASCADE,
+        utility_type VARCHAR(50) NOT NULL,
+        consumption DECIMAL(12,2),
+        cost DECIMAL(12,2),
+        unit VARCHAR(20),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      
+      CREATE TABLE IF NOT EXISTS hotel_folios (
+        id SERIAL PRIMARY KEY,
+        folio_date DATE NOT NULL,
+        guest_name VARCHAR(255),
+        arrival_date DATE,
+        departure_date DATE,
+        total_charges DECIMAL(12,2),
+        raw_data JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      
+      CREATE TABLE IF NOT EXISTS folio_line_items (
+        id SERIAL PRIMARY KEY,
+        folio_id INTEGER REFERENCES hotel_folios(id) ON DELETE CASCADE,
+        item_date DATE,
+        description VARCHAR(500),
+        category VARCHAR(100),
+        amount DECIMAL(12,2),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      
+      CREATE TABLE IF NOT EXISTS chat_messages (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        role VARCHAR(20) NOT NULL,
+        content TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      
+      CREATE TABLE IF NOT EXISTS uploaded_files (
+        id SERIAL PRIMARY KEY,
+        filename VARCHAR(255) NOT NULL,
+        file_type VARCHAR(50),
+        file_size INTEGER,
+        upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        processed BOOLEAN DEFAULT FALSE,
+        processing_notes TEXT
+      );
+    `);
     
-    const cols = [
-      ['monthly_statements', 'filename', 'VARCHAR(255)'],
-      ['monthly_statements', 'closing_balance', 'DECIMAL(12,2)'],
-      ['monthly_statements', 'total_expenses', 'DECIMAL(12,2)'],
-      ['monthly_statements', 'owner_revenue_share', 'DECIMAL(12,2)'],
-      ['monthly_statements', 'rental_revenue', 'DECIMAL(12,2)'],
-      ['monthly_statements', 'occupancy', 'JSONB'],
-      ['monthly_statements', 'expenses', 'JSONB'],
-      ['monthly_statements', 'utilities', 'JSONB'],
-      ['monthly_statements', 'monthly_data', 'JSONB']
-    ];
-    for (const [tbl, col, typ] of cols) {
-      const r = await pool.query('SELECT column_name FROM information_schema.columns WHERE table_name = $1 AND column_name = $2', [tbl, col]);
-      if (r.rows.length === 0) { await pool.query('ALTER TABLE ' + tbl + ' ADD COLUMN ' + col + ' ' + typ); console.log('Added:', col); }
-    }
+    const defaultPassword = process.env.DEFAULT_PASSWORD || 'villa2025';
+    const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+    await client.query(`
+      INSERT INTO users (username, password_hash)
+      VALUES ('admin', $1)
+      ON CONFLICT (username) DO NOTHING
+    `, [hashedPassword]);
     
-    const u = await pool.query('SELECT id FROM users WHERE username = $1', ['admin']);
-    if (u.rows.length === 0) {
-      const h = await bcrypt.hash(process.env.ADMIN_PASSWORD || 'villa2025', 10);
-      await pool.query('INSERT INTO users (username, password_hash) VALUES ($1, $2)', ['admin', h]);
-    }
-    console.log('Database initialized');
-  } catch (e) { console.error('DB init error:', e); }
+    console.log('Database initialized successfully');
+  } catch (err) {
+    console.error('Database initialization error:', err);
+  } finally {
+    client.release();
+  }
 }
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.set('trust proxy', 1);
-app.use(session({ secret: process.env.SESSION_SECRET || 'villa-secret-2025', resave: false, saveUninitialized: false, cookie: { secure: process.env.NODE_ENV === 'production', httpOnly: true, maxAge: 86400000, sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax' } }));
+// Auth middleware
+function requireAuth(req, res, next) {
+  if (req.session && req.session.userId) {
+    next();
+  } else {
+    res.status(401).json({ error: 'Authentication required' });
+  }
+}
 
-const upload = multer({ storage: multer.memoryStorage() });
-function auth(req, res, next) { if (req.session && req.session.userId) return next(); res.status(401).json({ error: 'Unauthorized' }); }
+// Helper function to clean numbers from PDF (handles "124,206.05" or "124,206.05$")
+function cleanNumber(str) {
+  if (!str) return 0;
+  const cleaned = str.replace(/\$/g, '').replace(/\s+/g, '').replace(/,/g, '');
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
+}
 
-function parseStatement(buffer, filename) {
-  const wb = XLSX.read(buffer, { type: 'buffer' });
-  console.log('Parsing:', filename, 'Sheets:', wb.SheetNames);
+// Parse monthly statement PDF - Amanyara specific format
+async function parseMonthlyStatement(buffer, filename) {
+  const data = await pdfParse(buffer);
+  const text = data.text;
   
-  const r = {
-    statementDate: null, year: null, month: null, closingBalance: null,
-    occupancy: { ownerNights: 0, guestNights: 0, complimentaryNights: 0, rentalNights: 0, vacantNights: 0, oooNights: 0 },
-    occupancyYTD: { ownerNights: 0, guestNights: 0, complimentaryNights: 0, rentalNights: 0, vacantNights: 0, oooNights: 0 },
-    monthlyOccupancy: {}, monthlyExpenses: {}, monthlyRevenue: {},
-    ownerRevenueShare: 0, ownerRevenueShareYTD: 0, grossRevenueYTD: 0,
-    grossRevenue: 0, netRevenue: 0, netRevenueYTD: 0,
-    adr: 0, adrYTD: 0,
-    expenses: [], totalExpenses: 0, totalExpensesYTD: 0,
-    expenseCategories: {
-      generalServices: { current: 0, ytd: 0, items: [] },
-      maintenance: { current: 0, ytd: 0, items: [] },
-      sharedExpenses: { current: 0, ytd: 0, items: [] },
-      utilities: { current: 0, ytd: 0, items: [] },
-      adminFee: { current: 0, ytd: 0 }
+  console.log('=== PARSING STATEMENT ===');
+  console.log('Filename:', filename);
+  
+  const result = {
+    statementDate: null,
+    year: null,
+    month: null,
+    openingBalance: null,
+    closingBalance: null,
+    occupancy: {
+      ownerNights: 0,
+      guestNights: 0,
+      rentalNights: 0,
+      vacantNights: 0
     },
-    utilities: { electricity: { consumption: 0, cost: 0 }, water: { consumption: 0, cost: 0 } }
+    expenses: [],
+    utilities: [],
+    rentalRevenue: 0,
+    ownerRevenueShare: 0,
+    totalExpenses: 0,
+    rawText: text
   };
   
-  const dm = filename.match(/(\w+)[\s_]+(\d{4})[\s_]+Statement/i);
-  if (dm) {
-    const mn = ['january','february','march','april','may','june','july','august','september','october','november','december'];
-    const mi = mn.findIndex(m => m.startsWith(dm[1].toLowerCase()));
-    if (mi !== -1) { r.month = mi + 1; r.year = parseInt(dm[2]); r.statementDate = new Date(r.year, r.month - 1, 1); }
+  // Parse date from filename - format: Villa_08_-November_Statement_2025.pdf
+  const dateMatch = filename.match(/(\w+)[\s_-]*Statement[\s_-]*(\d{4})/i);
+  if (dateMatch) {
+    const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 
+                        'july', 'august', 'september', 'october', 'november', 'december'];
+    const monthIdx = monthNames.findIndex(m => m.startsWith(dateMatch[1].toLowerCase()));
+    if (monthIdx !== -1) {
+      result.month = monthIdx + 1;
+      result.year = parseInt(dateMatch[2]);
+      result.statementDate = new Date(result.year, result.month - 1, 1);
+      console.log('Parsed date:', result.month, result.year);
+    }
   }
   
-  const n = v => { if (v == null || v === '') return 0; const x = parseFloat(v); return isNaN(x) ? 0 : x; };
+  // Parse closing balance - format: "124,206.05$" followed by newline then "Beginning Balance"
+  const balanceMatch = text.match(/(\d{1,3}(?:,\d{3})*\.\d{2})\$\s+\n.*Beginning Balance/);
+  if (balanceMatch) {
+    result.closingBalance = cleanNumber(balanceMatch[1]);
+    console.log('Closing balance:', result.closingBalance);
+  }
   
-  const ms = wb.Sheets['Villa Owner Monthly Statement'];
-  if (ms) {
-    const d = XLSX.utils.sheet_to_json(ms, { header: 1 });
-    const occRows = { 4: 'ownerNights', 5: 'guestNights', 6: 'complimentaryNights', 7: 'rentalNights', 8: 'vacantNights', 9: 'oooNights' };
-    for (const [ri, fld] of Object.entries(occRows)) {
-      const row = d[parseInt(ri)];
-      if (row) {
-        r.occupancy[fld] = n(row[4]);
-        r.occupancyYTD[fld] = n(row[6]);
-        for (let m = 1; m <= 12; m++) {
-          if (!r.monthlyOccupancy[m]) r.monthlyOccupancy[m] = {};
-          r.monthlyOccupancy[m][fld] = n(row[8 + m]);
-        }
+  // Parse occupancy - format: "Villa Owner Usage41919.00" or "Vacant26234234.00"
+  // First number is current month, followed by YTD (may be concatenated)
+  // "Vacant26234" -> current=26, ytd=234
+  const vacantMatch = text.match(/Vacant\s*(\d{1,2})(\d{2,3})(?:\d|\.)/);
+  if (vacantMatch) {
+    result.occupancy.vacantNights = parseInt(vacantMatch[1]);
+    console.log('Vacant nights:', result.occupancy.vacantNights);
+  }
+  
+  // Owner nights - "Villa Owner Usage419" -> current=4, ytd=19
+  const ownerMatch = text.match(/Villa Owner Usage\s*(\d)(\d{1,2})(?:\d|\.)/);
+  if (ownerMatch) {
+    result.occupancy.ownerNights = parseInt(ownerMatch[1]);
+    console.log('Owner nights:', result.occupancy.ownerNights);
+  }
+  
+  // Guest nights - "Villa Owner Guest Usage041" -> current=0, ytd=41
+  const guestMatch = text.match(/Villa Owner Guest Usage\s*(\d)(\d{1,2})(?:\d|\.)/);
+  if (guestMatch) {
+    result.occupancy.guestNights = parseInt(guestMatch[1]);
+    console.log('Guest nights:', result.occupancy.guestNights);
+  }
+  
+  // Rental nights - "Villa Rental040" -> current=0, ytd=40
+  const rentalMatch = text.match(/Villa Rental\s*(\d)(\d{1,2})(?:\d|\.)/);
+  if (rentalMatch) {
+    result.occupancy.rentalNights = parseInt(rentalMatch[1]);
+    console.log('Rental nights:', result.occupancy.rentalNights);
+  }
+  
+  // Parse 50% Owner Revenue - "50% OWNER REVENUE-205,349.98"
+  const revenueMatch = text.match(/50% OWNER REVENUE\s*-?\s*([\d,]+\.?\d*)/i);
+  if (revenueMatch) {
+    result.ownerRevenueShare = cleanNumber(revenueMatch[1]);
+    console.log('Owner revenue share:', result.ownerRevenueShare);
+  }
+  
+  // Parse Total Expenses - "TOTAL EXPENSES40,366.98"
+  const totalExpMatch = text.match(/TOTAL EXPENSES\s*([\d,]+\.\d{2})/i);
+  if (totalExpMatch) {
+    result.totalExpenses = cleanNumber(totalExpMatch[1]);
+    console.log('Total expenses:', result.totalExpenses);
+  }
+  
+  // Parse individual expenses - format: "Contract Services6,100.00"
+  const expensePatterns = [
+    { regex: /Contract Services\s*([\d,]+\.\d{2})/i, category: 'Maintenance', subcategory: 'Contract Services' },
+    { regex: /Electricity\s*([\d,]+\.\d{2})/i, category: 'Utilities', subcategory: 'Electricity' },
+    { regex: /Water\s*([\d,]+\.\d{2})/i, category: 'Utilities', subcategory: 'Water' },
+    { regex: /Cleaning supplies\s*([\d,]+\.\d{2})/i, category: 'General Services', subcategory: 'Cleaning Supplies' },
+    { regex: /Laundry\s*([\d,]+\.\d{2})/i, category: 'General Services', subcategory: 'Laundry' },
+    { regex: /Guest amenities\s*([\d,]+\.\d{2})/i, category: 'General Services', subcategory: 'Guest Amenities' },
+    { regex: /Telephone.*?Internet\s*([\d,]+\.\d{2})/i, category: 'General Services', subcategory: 'Telecom' },
+    { regex: /Security Program\s*([\d,]+\.\d{2})/i, category: 'Security', subcategory: 'Security Program' },
+    { regex: /15% Administration Fee\s*([\d,]+\.\d{2})/i, category: 'Admin', subcategory: 'Admin Fee (15%)' },
+    { regex: /Pest Control.*?Waste Removal\s*([\d,]+\.\d{2})/i, category: 'Maintenance', subcategory: 'Pest & Waste' },
+    { regex: /Maintenance Materials\s*([\d,]+\.\d{2})/i, category: 'Maintenance', subcategory: 'Materials' },
+    { regex: /Landscaping Program\s*([\d,]+\.\d{2})/i, category: 'Maintenance', subcategory: 'Landscaping Program' },
+    { regex: /Maintenance Program\s*([\d,]+\.\d{2})/i, category: 'Maintenance', subcategory: 'Maintenance Program' },
+    { regex: /Payroll & related Expenses\*?\s*([\d,]+\.\d{2})/i, category: 'Payroll', subcategory: 'Staff Payroll' },
+  ];
+  
+  for (const { regex, category, subcategory } of expensePatterns) {
+    const match = text.match(regex);
+    if (match) {
+      const amount = cleanNumber(match[1]);
+      if (amount > 0) {
+        result.expenses.push({ category, subcategory, amount });
+        console.log('Expense:', subcategory, amount);
       }
     }
-    
-    // ADR row 11, Gross Revenue row 12, Net Revenue row 18, 50% Owner row 20
-    if (d[11]) { r.adr = n(d[11][4]); r.adrYTD = n(d[11][6]); for (let m = 1; m <= 12; m++) { if (!r.monthlyRevenue[m]) r.monthlyRevenue[m] = {}; r.monthlyRevenue[m].adr = n(d[11][8 + m]); } }
-    if (d[12]) { r.grossRevenue = n(d[12][4]); r.grossRevenueYTD = n(d[12][6]); for (let m = 1; m <= 12; m++) { if (!r.monthlyRevenue[m]) r.monthlyRevenue[m] = {}; r.monthlyRevenue[m].grossRevenue = n(d[12][8 + m]); } }
-    if (d[18]) { r.netRevenue = n(d[18][4]); r.netRevenueYTD = n(d[18][6]); }
-    if (d[20]) { r.ownerRevenueShare = n(d[20][4]); r.ownerRevenueShareYTD = n(d[20][6]); for (let m = 1; m <= 12; m++) { if (!r.monthlyRevenue[m]) r.monthlyRevenue[m] = {}; r.monthlyRevenue[m].ownerRevenueShare = n(d[20][8 + m]); } }
-    
-    const em = [
-      [24,'generalServices','Payroll & Related'],[25,'generalServices','Guest Amenities'],[26,'generalServices','Cleaning Supplies'],
-      [27,'generalServices','Laundry'],[29,'generalServices','Other Operating'],[31,'generalServices','Telephone/Cable/Internet'],
-      [32,'generalServices','Printing'],[35,'generalServices','Liability Insurance'],
-      [39,'maintenance','Materials - Maintenance'],[40,'maintenance','Materials - Landscaping'],[41,'maintenance','Contract Services'],[42,'maintenance','Fuel'],
-      [47,'sharedExpenses','Payroll - Admin'],[49,'sharedExpenses','Maintenance Program'],[50,'sharedExpenses','Maintenance Materials'],
-      [51,'sharedExpenses','Landscaping Program'],[52,'sharedExpenses','Pest Control'],[53,'sharedExpenses','Security Program'],
-      [61,'adminFee','15% Admin Fee'],[64,'utilities','Electricity'],[65,'utilities','Water']
-    ];
-    for (const [ri, cat, nm] of em) {
-      const row = d[ri];
-      if (row) {
-        const cur = n(row[4]), ytd = n(row[6]);
-        const monthlyVals = {};
-        for (let m = 1; m <= 12; m++) { monthlyVals[m] = n(row[8 + m]); }
-        
-        if (cur || ytd) {
-          r.expenses.push({ category: cat, name: nm, current: cur, ytd, monthly: monthlyVals });
-          if (cat === 'adminFee') { r.expenseCategories.adminFee = { current: cur, ytd }; }
-          else { r.expenseCategories[cat].current += cur; r.expenseCategories[cat].ytd += ytd; r.expenseCategories[cat].items.push({ name: nm, current: cur, ytd, monthly: monthlyVals }); }
-        }
-        for (let m = 1; m <= 12; m++) { 
-          if (!r.monthlyExpenses[m]) r.monthlyExpenses[m] = { total: 0, items: [] }; 
-          const v = monthlyVals[m]; 
-          if (v) { r.monthlyExpenses[m].items.push({ category: cat, name: nm, amount: v }); r.monthlyExpenses[m].total += v; } 
-        }
-      }
-    }
-    if (d[67]) { r.totalExpenses = n(d[67][4]); r.totalExpensesYTD = n(d[67][6]); }
   }
   
-  const us = wb.Sheets['Utilities'];
-  if (us) {
-    const ud = XLSX.utils.sheet_to_json(us, { header: 1 });
-    for (const row of ud) {
-      const lbl = String(row[0] || '').toLowerCase();
-      if (lbl === 'total kwh' && !r.utilities.electricity.consumption) r.utilities.electricity.consumption = n(row[1]);
-      if (lbl.includes('total energy cost')) r.utilities.electricity.cost = n(row[2]);
-    }
+  // Parse utilities
+  const electricityMatch = text.match(/Electricity\s*([\d,]+\.\d{2})/i);
+  const waterMatch = text.match(/Water\s*([\d,]+\.\d{2})/i);
+  
+  if (electricityMatch) {
+    result.utilities.push({
+      type: 'Electricity',
+      consumption: 0,
+      cost: cleanNumber(electricityMatch[1]),
+      unit: 'KWH'
+    });
   }
   
-  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const ssn = r.month ? monthNames[r.month - 1] + ' Statement' : 'December Statement';
-  const ss = wb.Sheets[ssn] || wb.Sheets['December Statement'];
-  if (ss) {
-    const sd = XLSX.utils.sheet_to_json(ss, { header: 1 });
-    for (let i = sd.length - 1; i >= 0; i--) { 
-      if (sd[i] && sd[i][6] && typeof sd[i][6] === 'number' && sd[i][6] !== 0) { 
-        r.closingBalance = sd[i][6]; 
-        break; 
-      } 
-    }
+  if (waterMatch) {
+    result.utilities.push({
+      type: 'Water',
+      consumption: 0,
+      cost: cleanNumber(waterMatch[1]),
+      unit: 'Gallons'
+    });
   }
   
   console.log('=== PARSING COMPLETE ===');
-  console.log('Summary:', { month: r.month, year: r.year, balance: r.closingBalance, expenses: r.totalExpenses, adr: r.adr, adrYTD: r.adrYTD });
-  return r;
+  console.log('Result summary:', {
+    date: result.statementDate,
+    balance: result.closingBalance,
+    occupancy: result.occupancy,
+    totalExpenses: result.totalExpenses,
+    expenseCount: result.expenses.length,
+    ownerRevenue: result.ownerRevenueShare
+  });
+  
+  return result;
 }
 
+// Parse hotel folio PDF
+async function parseHotelFolio(buffer, filename) {
+  const data = await pdfParse(buffer);
+  const text = data.text;
+  
+  const result = {
+    guestName: null,
+    arrivalDate: null,
+    departureDate: null,
+    totalCharges: 0,
+    lineItems: [],
+    rawText: text
+  };
+  
+  const nameMatch = text.match(/Mr\.\s+(\w+\s+\w+)/i) || text.match(/Mrs\.\s+(\w+\s+\w+)/i);
+  if (nameMatch) {
+    result.guestName = nameMatch[1];
+  }
+  
+  const arrivalMatch = text.match(/Arrival\s*:?\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
+  const departureMatch = text.match(/Departure\s*:?\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
+  if (arrivalMatch) result.arrivalDate = arrivalMatch[1];
+  if (departureMatch) result.departureDate = departureMatch[1];
+  
+  const linePatterns = [
+    { pattern: /Transportation\s+([\d,]+\.?\d*)/gi, category: 'Transportation' },
+    { pattern: /Villa Owner Private Bar\s+([\d,]+\.?\d*)/gi, category: 'Bar' },
+    { pattern: /Tax - Government\s+([\d,]+\.?\d*)/gi, category: 'Tax' },
+    { pattern: /Spa.*?\s+([\d,]+\.?\d*)/gi, category: 'Spa' },
+    { pattern: /Private Dining.*Food\s+([\d,]+\.?\d*)/gi, category: 'Dining' },
+    { pattern: /Villa Owner Groceries\s+([\d,]+\.?\d*)/gi, category: 'Groceries' }
+  ];
+  
+  for (const { pattern, category } of linePatterns) {
+    let match;
+    while ((match = pattern.exec(text)) !== null) {
+      const amount = parseFloat(match[1].replace(/,/g, ''));
+      result.lineItems.push({ category, amount, description: match[0].trim() });
+      result.totalCharges += amount;
+    }
+  }
+  
+  return result;
+}
+
+// API Routes
+
+// Login
 app.post('/api/login', async (req, res) => {
+  const { username, password } = req.body;
+  
   try {
-    const { username, password } = req.body;
     const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
-    if (!result.rows.length) return res.status(401).json({ error: 'Invalid credentials' });
+    
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    
     const user = result.rows[0];
-    if (!(await bcrypt.compare(password, user.password_hash))) return res.status(401).json({ error: 'Invalid credentials' });
-    req.session.userId = user.id; 
+    const validPassword = await bcrypt.compare(password, user.password_hash);
+    
+    if (!validPassword) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    
+    req.session.userId = user.id;
     req.session.username = user.username;
+    
     res.json({ success: true, username: user.username });
-  } catch (e) { res.status(500).json({ error: 'Login failed' }); }
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: 'Login failed' });
+  }
 });
 
-app.post('/api/logout', (req, res) => { req.session.destroy(); res.json({ success: true }); });
-app.get('/api/auth/status', (req, res) => { res.json(req.session && req.session.userId ? { authenticated: true, username: req.session.username } : { authenticated: false }); });
+// Logout
+app.post('/api/logout', (req, res) => {
+  req.session.destroy();
+  res.json({ success: true });
+});
 
-app.post('/api/upload', auth, upload.single('file'), async (req, res) => {
+// Check auth status
+app.get('/api/auth/status', (req, res) => {
+  if (req.session && req.session.userId) {
+    res.json({ authenticated: true, username: req.session.username });
+  } else {
+    res.json({ authenticated: false });
+  }
+});
+
+// Change password
+app.post('/api/change-password', requireAuth, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  
   try {
-    if (!req.file) return res.status(400).json({ error: 'No file' });
-    const p = parseStatement(req.file.buffer, req.file.originalname);
-    if (!p.month || !p.year) return res.status(400).json({ error: 'Could not parse date' });
+    const result = await pool.query('SELECT * FROM users WHERE id = $1', [req.session.userId]);
+    const user = result.rows[0];
     
-    const occupancyData = JSON.stringify({ current: p.occupancy, ytd: p.occupancyYTD });
-    const expenseData = JSON.stringify({ items: p.expenses, categories: p.expenseCategories, totalCurrent: p.totalExpenses, totalYTD: p.totalExpensesYTD });
-    const monthlyData = JSON.stringify({ occupancy: p.monthlyOccupancy, expenses: p.monthlyExpenses, revenue: p.monthlyRevenue, adr: p.adr, adrYTD: p.adrYTD });
-    const utilitiesData = JSON.stringify(p.utilities);
+    const validPassword = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!validPassword) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
     
-    await pool.query(
-      'INSERT INTO monthly_statements (statement_date, year, month, filename, closing_balance, total_expenses, owner_revenue_share, rental_revenue, occupancy, expenses, utilities, monthly_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (year, month) DO UPDATE SET filename=EXCLUDED.filename, closing_balance=EXCLUDED.closing_balance, total_expenses=EXCLUDED.total_expenses, owner_revenue_share=EXCLUDED.owner_revenue_share, rental_revenue=EXCLUDED.rental_revenue, occupancy=EXCLUDED.occupancy, expenses=EXCLUDED.expenses, utilities=EXCLUDED.utilities, monthly_data=EXCLUDED.monthly_data',
-      [p.statementDate, p.year, p.month, req.file.originalname, p.closingBalance, p.totalExpenses, p.ownerRevenueShareYTD, p.grossRevenueYTD, occupancyData, expenseData, utilitiesData, monthlyData]
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hashedPassword, req.session.userId]);
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Password change error:', err);
+    res.status(500).json({ error: 'Failed to change password' });
+  }
+});
+
+// Upload and process PDF
+app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+  
+  const { originalname, buffer, size } = req.file;
+  const fileType = req.body.fileType || 'statement';
+  
+  try {
+    const uploadResult = await pool.query(
+      'INSERT INTO uploaded_files (filename, file_type, file_size) VALUES ($1, $2, $3) RETURNING id',
+      [originalname, fileType, size]
+    );
+    const uploadId = uploadResult.rows[0].id;
+    
+    let parseResult;
+    
+    if (fileType === 'statement') {
+      parseResult = await parseMonthlyStatement(buffer, originalname);
+      
+      if (parseResult.year && parseResult.month) {
+        const statementResult = await pool.query(`
+          INSERT INTO monthly_statements 
+          (statement_date, year, month, closing_balance, owner_nights, guest_nights, 
+           rental_nights, vacant_nights, rental_revenue, owner_revenue_share, raw_data)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          ON CONFLICT (year, month) DO UPDATE SET
+            closing_balance = EXCLUDED.closing_balance,
+            owner_nights = EXCLUDED.owner_nights,
+            guest_nights = EXCLUDED.guest_nights,
+            rental_nights = EXCLUDED.rental_nights,
+            vacant_nights = EXCLUDED.vacant_nights,
+            rental_revenue = EXCLUDED.rental_revenue,
+            owner_revenue_share = EXCLUDED.owner_revenue_share,
+            raw_data = EXCLUDED.raw_data
+          RETURNING id
+        `, [
+          parseResult.statementDate,
+          parseResult.year,
+          parseResult.month,
+          parseResult.closingBalance,
+          parseResult.occupancy.ownerNights,
+          parseResult.occupancy.guestNights,
+          parseResult.occupancy.rentalNights,
+          parseResult.occupancy.vacantNights,
+          parseResult.rentalRevenue,
+          parseResult.ownerRevenueShare,
+          { text: parseResult.rawText, expenses: parseResult.expenses, utilities: parseResult.utilities }
+        ]);
+        
+        const statementId = statementResult.rows[0].id;
+        
+        await pool.query('DELETE FROM expense_categories WHERE statement_id = $1', [statementId]);
+        
+        for (const expense of parseResult.expenses) {
+          await pool.query(
+            'INSERT INTO expense_categories (statement_id, category, subcategory, amount) VALUES ($1, $2, $3, $4)',
+            [statementId, expense.category, expense.subcategory, expense.amount]
+          );
+        }
+        
+        await pool.query('DELETE FROM utility_readings WHERE statement_id = $1', [statementId]);
+        
+        for (const utility of parseResult.utilities) {
+          await pool.query(
+            'INSERT INTO utility_readings (statement_id, utility_type, consumption, cost, unit) VALUES ($1, $2, $3, $4, $5)',
+            [statementId, utility.type, utility.consumption, utility.cost, utility.unit]
+          );
+        }
+      }
+    } else if (fileType === 'folio') {
+      parseResult = await parseHotelFolio(buffer, originalname);
+      
+      const folioResult = await pool.query(`
+        INSERT INTO hotel_folios (folio_date, guest_name, total_charges, raw_data)
+        VALUES (CURRENT_DATE, $1, $2, $3)
+        RETURNING id
+      `, [parseResult.guestName, parseResult.totalCharges, { text: parseResult.rawText }]);
+      
+      const folioId = folioResult.rows[0].id;
+      
+      for (const item of parseResult.lineItems) {
+        await pool.query(
+          'INSERT INTO folio_line_items (folio_id, description, category, amount) VALUES ($1, $2, $3, $4)',
+          [folioId, item.description, item.category, item.amount]
+        );
+      }
+    }
+    
+    await pool.query('UPDATE uploaded_files SET processed = true WHERE id = $1', [uploadId]);
+    
+    res.json({ success: true, parsed: parseResult });
+  } catch (err) {
+    console.error('Upload processing error:', err);
+    res.status(500).json({ error: 'Failed to process file', details: err.message });
+  }
+});
+
+// Get dashboard data
+app.get('/api/dashboard', requireAuth, async (req, res) => {
+  try {
+    const statements = await pool.query(`
+      SELECT * FROM monthly_statements 
+      ORDER BY year DESC, month DESC
+    `);
+    
+    let expenses = [];
+    let utilities = [];
+    if (statements.rows.length > 0) {
+      const latestId = statements.rows[0].id;
+      
+      const expenseResult = await pool.query(`
+        SELECT category, subcategory, SUM(amount) as total
+        FROM expense_categories 
+        WHERE statement_id = $1
+        GROUP BY category, subcategory
+        ORDER BY total DESC
+      `, [latestId]);
+      expenses = expenseResult.rows;
+      
+      const utilityResult = await pool.query(`
+        SELECT * FROM utility_readings WHERE statement_id = $1
+      `, [latestId]);
+      utilities = utilityResult.rows;
+    }
+    
+    const currentYear = new Date().getFullYear();
+    const ytdResult = await pool.query(`
+      SELECT 
+        SUM(closing_balance) as total_balance,
+        SUM(owner_nights) as total_owner_nights,
+        SUM(guest_nights) as total_guest_nights,
+        SUM(rental_nights) as total_rental_nights,
+        SUM(vacant_nights) as total_vacant_nights,
+        SUM(rental_revenue) as total_rental_revenue,
+        SUM(owner_revenue_share) as total_owner_revenue
+      FROM monthly_statements
+      WHERE year = $1
+    `, [currentYear]);
+    
+    const trendResult = await pool.query(`
+      SELECT 
+        ms.year, ms.month,
+        SUM(ec.amount) as total_expenses
+      FROM monthly_statements ms
+      LEFT JOIN expense_categories ec ON ms.id = ec.statement_id
+      WHERE ms.year >= $1 - 1
+      GROUP BY ms.year, ms.month
+      ORDER BY ms.year, ms.month
+    `, [currentYear]);
+    
+    const filesResult = await pool.query(`
+      SELECT * FROM uploaded_files ORDER BY upload_date DESC LIMIT 20
+    `);
+    
+    res.json({
+      statements: statements.rows,
+      latestExpenses: expenses,
+      latestUtilities: utilities,
+      ytdSummary: ytdResult.rows[0],
+      expenseTrends: trendResult.rows,
+      recentFiles: filesResult.rows
+    });
+  } catch (err) {
+    console.error('Dashboard data error:', err);
+    res.status(500).json({ error: 'Failed to fetch dashboard data' });
+  }
+});
+
+// Get data for a specific statement
+app.get('/api/statement/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const statementResult = await pool.query(
+      'SELECT * FROM monthly_statements WHERE id = $1',
+      [id]
     );
     
-    res.json({ success: true, parsed: { month: p.month, year: p.year, closingBalance: p.closingBalance, totalExpenses: p.totalExpenses, adr: p.adr, adrYTD: p.adrYTD, occupancy: p.occupancy } });
-  } catch (e) { console.error('Upload error:', e); res.status(500).json({ error: e.message }); }
+    if (statementResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Statement not found' });
+    }
+    
+    const statement = statementResult.rows[0];
+    
+    // Get all expenses for this statement
+    const expenseResult = await pool.query(`
+      SELECT category, subcategory, amount
+      FROM expense_categories 
+      WHERE statement_id = $1
+      ORDER BY category, amount DESC
+    `, [id]);
+    
+    // Get expenses grouped by category
+    const categoryResult = await pool.query(`
+      SELECT category, SUM(amount) as total
+      FROM expense_categories 
+      WHERE statement_id = $1
+      GROUP BY category
+      ORDER BY total DESC
+    `, [id]);
+    
+    // Get utilities
+    const utilityResult = await pool.query(
+      'SELECT * FROM utility_readings WHERE statement_id = $1',
+      [id]
+    );
+    
+    res.json({
+      statement,
+      expenses: expenseResult.rows,
+      expensesByCategory: categoryResult.rows,
+      utilities: utilityResult.rows
+    });
+  } catch (err) {
+    console.error('Statement fetch error:', err);
+    res.status(500).json({ error: 'Failed to fetch statement data' });
+  }
 });
 
-app.get('/api/statements', auth, async (req, res) => {
+// Chat with AI
+app.post('/api/chat', requireAuth, async (req, res) => {
+  const { message } = req.body;
+  
+  if (!anthropic) {
+    return res.status(503).json({ error: 'AI chat not configured. Please set ANTHROPIC_API_KEY.' });
+  }
+  
   try {
-    const r = await pool.query('SELECT id, statement_date, year, month, filename, closing_balance, total_expenses, owner_revenue_share, rental_revenue, occupancy, expenses, utilities, monthly_data FROM monthly_statements ORDER BY year DESC, month DESC');
-    res.json(r.rows);
-  } catch (e) { res.status(500).json({ error: 'Failed to fetch' }); }
+    await pool.query(
+      'INSERT INTO chat_messages (user_id, role, content) VALUES ($1, $2, $3)',
+      [req.session.userId, 'user', message]
+    );
+    
+    const statements = await pool.query(`
+      SELECT year, month, closing_balance, owner_nights, guest_nights, rental_nights, 
+             vacant_nights, rental_revenue, owner_revenue_share
+      FROM monthly_statements 
+      ORDER BY year DESC, month DESC 
+      LIMIT 12
+    `);
+    
+    const expenses = await pool.query(`
+      SELECT ec.category, ec.subcategory, ec.amount, ms.year, ms.month
+      FROM expense_categories ec
+      JOIN monthly_statements ms ON ec.statement_id = ms.id
+      ORDER BY ms.year DESC, ms.month DESC
+      LIMIT 50
+    `);
+    
+    const systemPrompt = 'You are a helpful financial assistant for Villa 8 at Amanyara Resort in Turks & Caicos. ' +
+      'You have access to the villa financial data including monthly statements, expenses, occupancy, and utility usage.\n\n' +
+      'Here is the recent financial data:\n\nMonthly Statements (most recent 12 months):\n' +
+      JSON.stringify(statements.rows, null, 2) + '\n\nRecent Expenses:\n' +
+      JSON.stringify(expenses.rows, null, 2) + '\n\n' +
+      'Help the owner understand their villa expenses, occupancy patterns, and financial performance. ' +
+      'Provide specific numbers when available. Be concise but thorough.';
+    
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: message }]
+    });
+    
+    const assistantMessage = response.content[0].text;
+    
+    await pool.query(
+      'INSERT INTO chat_messages (user_id, role, content) VALUES ($1, $2, $3)',
+      [req.session.userId, 'assistant', assistantMessage]
+    );
+    
+    res.json({ response: assistantMessage });
+  } catch (err) {
+    console.error('Chat error:', err);
+    res.status(500).json({ error: 'Failed to process chat message' });
+  }
 });
 
-app.delete('/api/statements/:id', auth, async (req, res) => {
-  try { await pool.query('DELETE FROM monthly_statements WHERE id = $1', [req.params.id]); res.json({ success: true }); }
-  catch (e) { res.status(500).json({ error: 'Delete failed' }); }
+// Get chat history
+app.get('/api/chat/history', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT role, content, created_at FROM chat_messages WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50',
+      [req.session.userId]
+    );
+    res.json(result.rows.reverse());
+  } catch (err) {
+    console.error('Chat history error:', err);
+    res.status(500).json({ error: 'Failed to fetch chat history' });
+  }
 });
 
-const dashboardHTML = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Villa 08 - Amanyara</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);min-height:100vh;color:#fff}
-    .login-container{display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px}
-    .login-box{background:rgba(255,255,255,0.1);backdrop-filter:blur(10px);border-radius:20px;padding:40px;width:100%;max-width:400px;border:1px solid rgba(255,255,255,0.2)}
-    .login-box h1{text-align:center;margin-bottom:10px}
-    .login-box .subtitle{text-align:center;color:rgba(255,255,255,0.6);margin-bottom:30px}
-    .form-group{margin-bottom:20px}
-    .form-group label{display:block;margin-bottom:8px}
-    .form-group input{width:100%;padding:12px;border:1px solid rgba(255,255,255,0.2);border-radius:10px;background:rgba(255,255,255,0.1);color:#fff;font-size:16px}
-    .btn{width:100%;padding:14px;border:none;border-radius:10px;background:linear-gradient(135deg,#4ecdc4,#44a08d);color:#fff;font-size:16px;font-weight:600;cursor:pointer}
-    .error-msg{color:#ff6b6b;text-align:center;margin-top:15px}
-    .dashboard{display:none;padding:20px;max-width:1600px;margin:0 auto}
-    .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:30px;flex-wrap:wrap;gap:15px}
-    .header h1{font-size:28px}
-    .header-actions{display:flex;gap:10px;flex-wrap:wrap}
-    .upload-btn{padding:10px 20px;background:linear-gradient(135deg,#4ecdc4,#44a08d);border:none;border-radius:10px;color:#fff;font-weight:600;cursor:pointer}
-    .logout-btn{padding:10px 20px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:10px;color:#fff;cursor:pointer}
-    .view-controls{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;align-items:center}
-    .view-controls select{padding:10px 15px;border-radius:10px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.1);color:#fff}
-    .view-controls select option{background:#1a1a2e}
-    .view-label{color:rgba(255,255,255,0.6);font-size:14px}
-    .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:15px;margin-bottom:30px}
-    .kpi-card{background:rgba(255,255,255,0.1);border-radius:15px;padding:18px;border:1px solid rgba(255,255,255,0.1)}
-    .kpi-card .label{color:rgba(255,255,255,0.6);font-size:12px;margin-bottom:6px}
-    .kpi-card .value{font-size:22px;font-weight:700;color:#4ecdc4}
-    .kpi-card .subtext{font-size:10px;color:rgba(255,255,255,0.5);margin-top:4px}
-    .kpi-card.highlight .value{color:#f39c12}
-    .kpi-card.adr .value{color:#e74c3c}
-    .occupancy-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-bottom:30px}
-    .occupancy-card{background:rgba(255,255,255,0.08);border-radius:10px;padding:12px;text-align:center}
-    .occupancy-card .nights{font-size:24px;font-weight:700}
-    .occupancy-card .type{font-size:10px;color:rgba(255,255,255,0.7);margin-top:4px}
-    .occupancy-card.owner .nights{color:#3498db}
-    .occupancy-card.guest .nights{color:#9b59b6}
-    .occupancy-card.rental .nights{color:#2ecc71}
-    .occupancy-card.vacant .nights{color:#95a5a6}
-    .occupancy-card.comp .nights{color:#e74c3c}
-    .occupancy-card.ooo .nights{color:#7f8c8d}
-    .charts-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(350px,1fr));gap:20px;margin-bottom:30px}
-    .chart-card{background:rgba(255,255,255,0.1);border-radius:15px;padding:20px}
-    .chart-card h3{margin-bottom:15px;font-size:15px}
-    .expense-section{background:rgba(255,255,255,0.1);border-radius:15px;padding:20px;margin-bottom:30px}
-    .expense-section h3{margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}
-    .expense-table{width:100%;border-collapse:collapse}
-    .expense-table th{text-align:left;padding:10px 8px;border-bottom:2px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.7);font-size:12px;font-weight:600}
-    .expense-table td{padding:8px;border-bottom:1px solid rgba(255,255,255,0.1);font-size:13px}
-    .expense-table .category-row{background:rgba(78,205,196,0.1)}
-    .expense-table .category-row td{color:#4ecdc4;font-weight:600;padding-top:12px}
-    .expense-table .item-row td:first-child{padding-left:20px;color:rgba(255,255,255,0.8)}
-    .expense-table .month-col{text-align:right;min-width:90px}
-    .expense-table .ytd-col{text-align:right;min-width:100px;color:#4ecdc4}
-    .expense-table .avg-col{text-align:right;min-width:80px;color:rgba(255,255,255,0.5);font-size:11px}
-    .anomaly{background:rgba(231,76,60,0.2) !important;position:relative}
-    .anomaly::after{content:'⚠️';position:absolute;right:5px;top:50%;transform:translateY(-50%)}
-    .anomaly-badge{display:inline-block;background:#e74c3c;color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;margin-left:5px}
-    .anomaly-section{background:rgba(231,76,60,0.1);border:1px solid rgba(231,76,60,0.3);border-radius:15px;padding:20px;margin-bottom:30px}
-    .anomaly-section h3{color:#e74c3c;margin-bottom:15px}
-    .anomaly-item{display:flex;justify-content:space-between;align-items:center;padding:10px;background:rgba(255,255,255,0.05);border-radius:8px;margin-bottom:8px}
-    .anomaly-item .info{flex:1}
-    .anomaly-item .name{font-weight:600}
-    .anomaly-item .detail{font-size:12px;color:rgba(255,255,255,0.6)}
-    .anomaly-item .amount{color:#e74c3c;font-weight:700;font-size:18px}
-    .statements-list{background:rgba(255,255,255,0.1);border-radius:15px;padding:20px}
-    .statement-item{display:flex;justify-content:space-between;align-items:center;padding:12px;background:rgba(255,255,255,0.05);border-radius:8px;margin-bottom:8px}
-    .statement-item .month{font-weight:600}
-    .statement-item .filename{font-size:12px;color:rgba(255,255,255,0.5)}
-    .statement-item .delete-btn{padding:6px 12px;background:rgba(255,107,107,0.2);border:none;border-radius:6px;color:#ff6b6b;cursor:pointer}
-    .file-input{display:none}
-    .empty-state{text-align:center;padding:40px;color:rgba(255,255,255,0.5)}
-    .section-title{font-size:16px;margin-bottom:15px;display:flex;align-items:center;gap:10px}
-    @media(max-width:768px){.charts-grid{grid-template-columns:1fr}.expense-table{font-size:11px}}
-  </style>
-</head>
-<body>
-  <div class="login-container" id="loginScreen">
-    <div class="login-box">
-      <h1>Villa 08</h1>
-      <p class="subtitle">Amanyara Financial Dashboard</p>
-      <form id="loginForm">
-        <div class="form-group"><label>Username</label><input type="text" id="username" required></div>
-        <div class="form-group"><label>Password</label><input type="password" id="password" required></div>
-        <button type="submit" class="btn">Sign In</button>
-        <p class="error-msg" id="loginError"></p>
-      </form>
-    </div>
-  </div>
-  <div class="dashboard" id="dashboard">
-    <div class="header">
-      <h1>Villa 08 Dashboard</h1>
-      <div class="header-actions">
-        <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls">
-        <button class="upload-btn" onclick="document.getElementById('fileInput').click()">Upload Statement</button>
-        <button class="logout-btn" onclick="logout()">Logout</button>
-      </div>
-    </div>
-    <div class="view-controls">
-      <span class="view-label">View:</span>
-      <select id="viewMode" onchange="updateView()">
-        <option value="ytd" selected>Year to Date (YTD)</option>
-        <option value="t12">Trailing 12 Months</option>
-        <option value="month">Single Month</option>
-      </select>
-      <span class="view-label" id="monthLabel" style="margin-left:15px;display:none">Month:</span>
-      <select id="monthSelect" onchange="updateView()" style="display:none">
-        <option value="12">December</option><option value="11">November</option><option value="10">October</option>
-        <option value="9">September</option><option value="8">August</option><option value="7">July</option>
-        <option value="6">June</option><option value="5">May</option><option value="4">April</option>
-        <option value="3">March</option><option value="2">February</option><option value="1">January</option>
-      </select>
-    </div>
-    <div class="kpi-grid">
-      <div class="kpi-card"><div class="label">Current Balance</div><div class="value" id="kpiBalance">$0</div><div class="subtext" id="kpiBalanceDate">-</div></div>
-      <div class="kpi-card"><div class="label" id="expLabel">Expenses (YTD)</div><div class="value" id="kpiExpenses">$0</div><div class="subtext" id="kpiExpSub"></div></div>
-      <div class="kpi-card highlight"><div class="label" id="revLabel">Owner Revenue (YTD)</div><div class="value" id="kpiRevenue">$0</div><div class="subtext">50% of net rental</div></div>
-      <div class="kpi-card adr"><div class="label" id="adrLabel">Avg Daily Rate (YTD)</div><div class="value" id="kpiADR">$0</div><div class="subtext" id="kpiADRsub"></div></div>
-      <div class="kpi-card"><div class="label" id="occLabel">Occupancy (YTD)</div><div class="value" id="kpiOccupancy">0%</div><div class="subtext" id="kpiOccSub">-</div></div>
-    </div>
-    <h3 class="section-title">Occupancy Breakdown</h3>
-    <div class="occupancy-grid">
-      <div class="occupancy-card owner"><div class="nights" id="occOwner">0</div><div class="type">Owner</div></div>
-      <div class="occupancy-card guest"><div class="nights" id="occGuest">0</div><div class="type">Guest</div></div>
-      <div class="occupancy-card comp"><div class="nights" id="occComp">0</div><div class="type">Comp</div></div>
-      <div class="occupancy-card rental"><div class="nights" id="occRental">0</div><div class="type">Rental</div></div>
-      <div class="occupancy-card vacant"><div class="nights" id="occVacant">0</div><div class="type">Vacant</div></div>
-      <div class="occupancy-card ooo"><div class="nights" id="occOOO">0</div><div class="type">OOO</div></div>
-    </div>
-    <div class="anomaly-section" id="anomalySection" style="display:none">
-      <h3>⚠️ Expense Anomalies Detected</h3>
-      <div id="anomalyList"></div>
-    </div>
-    <div class="charts-grid">
-      <div class="chart-card"><h3>Monthly Expenses</h3><canvas id="expChart"></canvas></div>
-      <div class="chart-card"><h3>Occupancy by Month</h3><canvas id="occChart"></canvas></div>
-    </div>
-    <div class="expense-section">
-      <h3>Expense Breakdown</h3>
-      <table class="expense-table" id="expTable">
-        <thead><tr><th>Category / Item</th><th class="month-col" id="expColHeader">Selected</th><th class="ytd-col">YTD</th><th class="avg-col">Avg/Mo</th></tr></thead>
-        <tbody id="expTableBody"></tbody>
-      </table>
-    </div>
-    <div class="statements-list"><h3 class="section-title">Uploaded Statements</h3><div id="stmtList"></div></div>
-  </div>
-  <script>
-    let statements=[],expChart=null,occChart=null,viewMode='ytd',selMonth=12;
-    async function checkAuth(){try{const r=await fetch('/api/auth/status');const d=await r.json();if(d.authenticated){show();load();}}catch(e){}}
-    document.getElementById('loginForm').onsubmit=async e=>{e.preventDefault();try{const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:document.getElementById('username').value,password:document.getElementById('password').value})});const d=await r.json();if(d.success){show();load();}else document.getElementById('loginError').textContent=d.error;}catch(e){document.getElementById('loginError').textContent='Failed';}};
-    async function logout(){await fetch('/api/logout',{method:'POST'});document.getElementById('loginScreen').style.display='flex';document.getElementById('dashboard').style.display='none';}
-    function show(){document.getElementById('loginScreen').style.display='none';document.getElementById('dashboard').style.display='block';}
-    async function load(){try{statements=await(await fetch('/api/statements')).json();render();}catch(e){}}
-    document.getElementById('fileInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;const fd=new FormData();fd.append('file',f);try{const r=await fetch('/api/upload',{method:'POST',body:fd});const d=await r.json();if(d.success){alert('Uploaded!');load();}else alert('Error: '+d.error);}catch(e){alert('Error: '+e.message);}e.target.value='';};
-    async function del(id){if(!confirm('Delete?'))return;await fetch('/api/statements/'+id,{method:'DELETE'});load();}
-    function updateView(){
-      viewMode=document.getElementById('viewMode').value;
-      selMonth=parseInt(document.getElementById('monthSelect').value);
-      const showMonth=viewMode==='month';
-      document.getElementById('monthSelect').style.display=showMonth?'inline-block':'none';
-      document.getElementById('monthLabel').style.display=showMonth?'inline':'none';
-      render();
-    }
-    
-    function render(){
-      if(!statements.length){document.getElementById('expTableBody').innerHTML='<tr><td colspan="4" class="empty-state">No data</td></tr>';document.getElementById('stmtList').innerHTML='<div class="empty-state">No statements</div>';return;}
-      statements.sort((a,b)=>a.year!==b.year?b.year-a.year:b.month-a.month);
-      const s=statements[0],mn=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],fmn=['January','February','March','April','May','June','July','August','September','October','November','December'];
-      const occ=s.occupancy||{},md=s.monthly_data||{},exp=s.expenses||{};
-      const mo=md.occupancy||{},me=md.expenses||{},rev=md.revenue||{};
-      const monthStr=String(selMonth); // JSON keys are strings
-      
-      // Calculate values based on view mode
-      let od,expVal,adrVal,viewLabel,monthsCount;
-      
-      if(viewMode==='ytd'){
-        // YTD view - use YTD totals
-        od=occ.ytd||occ.current||{};
-        expVal=exp.totalYTD||s.total_expenses;
-        adrVal=md.adrYTD||0;
-        viewLabel='YTD '+s.year;
-        monthsCount=s.month; // Number of months in YTD
-      } else if(viewMode==='t12'){
-        // Trailing 12 months - sum all months
-        od={ownerNights:0,guestNights:0,complimentaryNights:0,rentalNights:0,vacantNights:0,oooNights:0};
-        expVal=0;
-        let totalRevenue=0,rentalNights=0;
-        for(let m=1;m<=12;m++){
-          const mStr=String(m);
-          const mOcc=mo[mStr]||mo[m]||{};
-          od.ownerNights+=(mOcc.ownerNights||0);
-          od.guestNights+=(mOcc.guestNights||0);
-          od.complimentaryNights+=(mOcc.complimentaryNights||0);
-          od.rentalNights+=(mOcc.rentalNights||0);
-          od.vacantNights+=(mOcc.vacantNights||0);
-          od.oooNights+=(mOcc.oooNights||0);
-          expVal+=((me[mStr]||me[m])?.total||0);
-          totalRevenue+=((rev[mStr]||rev[m])?.grossRevenue||0);
-          rentalNights+=(mOcc.rentalNights||0);
-        }
-        adrVal=rentalNights>0?(totalRevenue/rentalNights):0;
-        viewLabel='Trailing 12 Mo';
-        monthsCount=12;
-      } else {
-        // Single month view
-        od=mo[monthStr]||mo[selMonth]||occ.current||{};
-        expVal=(me[monthStr]||me[selMonth])?.total||(selMonth===s.month?s.total_expenses:0);
-        adrVal=(rev[monthStr]||rev[selMonth])?.adr||md.adr||0;
-        viewLabel=fmn[selMonth-1];
-        monthsCount=1;
-      }
-      
-      // Update KPI labels
-      document.getElementById('expLabel').textContent='Expenses ('+viewLabel+')';
-      document.getElementById('revLabel').textContent='Owner Revenue (YTD)';
-      document.getElementById('adrLabel').textContent='ADR ('+viewLabel+')';
-      document.getElementById('occLabel').textContent='Occupancy ('+viewLabel+')';
-      
-      // Update KPI values
-      document.getElementById('kpiBalance').textContent=fmt(s.closing_balance);
-      document.getElementById('kpiBalanceDate').textContent=mn[s.month-1]+' '+s.year;
-      document.getElementById('kpiExpenses').textContent=fmt(expVal);
-      document.getElementById('kpiExpSub').textContent=viewMode==='month'?'YTD: '+fmt(exp.totalYTD||s.total_expenses):'';
-      document.getElementById('kpiRevenue').textContent=fmt(s.owner_revenue_share);
-      document.getElementById('kpiADR').textContent=fmt(adrVal);
-      document.getElementById('kpiADRsub').textContent=viewMode==='month'?'YTD: '+fmt(md.adrYTD||0):'';
-      
-      const tn=(od.ownerNights||0)+(od.guestNights||0)+(od.complimentaryNights||0)+(od.rentalNights||0)+(od.vacantNights||0)+(od.oooNights||0);
-      const on=(od.ownerNights||0)+(od.guestNights||0)+(od.complimentaryNights||0)+(od.rentalNights||0);
-      document.getElementById('kpiOccupancy').textContent=(tn?Math.round(on/tn*100):0)+'%';
-      document.getElementById('kpiOccSub').textContent=on+' of '+tn+' nights';
-      document.getElementById('occOwner').textContent=od.ownerNights||0;
-      document.getElementById('occGuest').textContent=od.guestNights||0;
-      document.getElementById('occComp').textContent=od.complimentaryNights||0;
-      document.getElementById('occRental').textContent=od.rentalNights||0;
-      document.getElementById('occVacant').textContent=od.vacantNights||0;
-      document.getElementById('occOOO').textContent=od.oooNights||0;
-      
-      renderExpTable(exp,me,viewMode,selMonth);
-      document.getElementById('expColHeader').textContent=viewLabel;
-      renderAnomalies(exp,me);
-      renderStmts();
-      renderCharts(s,md);
-    }
-    
-    function renderExpTable(exp,me,vMode,month){
-      const cats=exp.categories||{};
-      const cn={generalServices:'General Services',maintenance:'Maintenance',sharedExpenses:'Shared Expenses',utilities:'Utilities'};
-      let h='';
-      const monthStr=String(month); // JSON keys are strings
-      
-      for(const[k,d]of Object.entries(cats)){
-        if(k==='adminFee')continue;
-        
-        // Calculate category totals based on view mode
-        let catTotal=0;
-        if(vMode==='ytd'){
-          catTotal=d.ytd||0;
-        }else if(vMode==='t12'){
-          catTotal=d.items?.reduce((sum,i)=>{let t=0;for(let m=1;m<=12;m++)t+=(i.monthly?.[String(m)]||i.monthly?.[m]||0);return sum+t;},0)||0;
-        }else{
-          catTotal=d.items?.reduce((sum,i)=>(sum+(i.monthly?.[monthStr]||i.monthly?.[month]||0)),0)||0;
-        }
-        
-        const avgPerMonth=d.ytd?(d.ytd/12).toFixed(2):0;
-        h+='<tr class="category-row"><td>'+cn[k]+'</td><td class="month-col">'+fmt(catTotal)+'</td><td class="ytd-col">'+fmt(d.ytd)+'</td><td class="avg-col">'+fmt(avgPerMonth)+'</td></tr>';
-        
-        if(d.items){
-          for(const i of d.items){
-            let itemVal=0;
-            if(vMode==='ytd'){
-              itemVal=i.ytd||0;
-            }else if(vMode==='t12'){
-              for(let m=1;m<=12;m++)itemVal+=(i.monthly?.[String(m)]||i.monthly?.[m]||0);
-            }else{
-              itemVal=i.monthly?.[monthStr]||i.monthly?.[month]||0;
-            }
-            
-            const avg=i.ytd?(i.ytd/12):0;
-            const isAnomaly=vMode==='month'&&avg>0&&itemVal>(avg*1.5);
-            h+='<tr class="item-row'+(isAnomaly?' anomaly':'')+'"><td>'+i.name+(isAnomaly?'<span class="anomaly-badge">+'+Math.round((itemVal/avg-1)*100)+'%</span>':'')+'</td><td class="month-col">'+fmt(itemVal)+'</td><td class="ytd-col">'+fmt(i.ytd)+'</td><td class="avg-col">'+fmt(avg)+'</td></tr>';
-          }
-        }
-      }
-      
-      if(cats.adminFee){
-        let adminVal=0;
-        if(vMode==='ytd'||vMode==='t12'){
-          adminVal=cats.adminFee.ytd||0;
-        }else{
-          adminVal=cats.adminFee.current||0;
-        }
-        const adminAvg=cats.adminFee.ytd?(cats.adminFee.ytd/12):0;
-        h+='<tr class="category-row"><td>15% Admin Fee</td><td class="month-col">'+fmt(adminVal)+'</td><td class="ytd-col">'+fmt(cats.adminFee.ytd)+'</td><td class="avg-col">'+fmt(adminAvg)+'</td></tr>';
-      }
-      document.getElementById('expTableBody').innerHTML=h||'<tr><td colspan="4">No expense data</td></tr>';
-    }
-    
-    function renderAnomalies(exp,me){
-      const cats=exp.categories||{};
-      const anomalies=[];
-      const fmn=['January','February','March','April','May','June','July','August','September','October','November','December'];
-      
-      for(const[k,d]of Object.entries(cats)){
-        if(k==='adminFee'||!d.items)continue;
-        for(const i of d.items){
-          if(!i.monthly)continue;
-          const avg=i.ytd?(i.ytd/12):0;
-          if(avg<=0)continue;
-          for(let m=1;m<=12;m++){
-            const mv=i.monthly[String(m)]||i.monthly[m]||0;
-            if(mv>(avg*1.5)&&mv>100){
-              anomalies.push({name:i.name,month:fmn[m-1],amount:mv,avg:avg,pct:Math.round((mv/avg-1)*100)});
-            }
-          }
-        }
-      }
-      
-      const section=document.getElementById('anomalySection');
-      const list=document.getElementById('anomalyList');
-      if(anomalies.length===0){section.style.display='none';return;}
-      
-      section.style.display='block';
-      anomalies.sort((a,b)=>b.pct-a.pct);
-      list.innerHTML=anomalies.slice(0,5).map(a=>'<div class="anomaly-item"><div class="info"><div class="name">'+a.name+'</div><div class="detail">'+a.month+': '+fmt(a.amount)+' vs avg '+fmt(a.avg)+' (+'+a.pct+'%)</div></div><div class="amount">+'+a.pct+'%</div></div>').join('');
-    }
-    
-    function renderStmts(){
-      const fmn=['January','February','March','April','May','June','July','August','September','October','November','December'];
-      document.getElementById('stmtList').innerHTML=statements.map(s=>'<div class="statement-item"><div><div class="month">'+fmn[s.month-1]+' '+s.year+'</div><div class="filename">'+(s.filename||'-')+'</div></div><div><span style="color:#4ecdc4;margin-right:15px">'+fmt(s.total_expenses)+'</span><button class="delete-btn" onclick="del('+s.id+')">Delete</button></div></div>').join('')||'<div class="empty-state">No statements</div>';
-    }
-    
-    function renderCharts(s,md){
-      const mn=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-      const em=md.expenses||{},ed=[];
-      for(let m=1;m<=12;m++){
-        const mData=em[String(m)]||em[m]||{};
-        ed.push(mData.total||0);
-      }
-      if(expChart)expChart.destroy();
-      expChart=new Chart(document.getElementById('expChart'),{type:'bar',data:{labels:mn,datasets:[{label:'Expenses',data:ed,backgroundColor:ed.map((v,i)=>i+1===selMonth&&viewMode==='month'?'rgba(78,205,196,1)':'rgba(78,205,196,0.4)'),borderColor:'#4ecdc4',borderWidth:1}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{color:'rgba(255,255,255,0.6)'},grid:{color:'rgba(255,255,255,0.1)'}},x:{ticks:{color:'rgba(255,255,255,0.6)'},grid:{display:false}}}}});
-      const om=md.occupancy||{},od=[],gd=[],rd=[],vd=[];
-      for(let m=1;m<=12;m++){
-        const moData=om[String(m)]||om[m]||{};
-        od.push(moData.ownerNights||0);
-        gd.push(moData.guestNights||0);
-        rd.push(moData.rentalNights||0);
-        vd.push(moData.vacantNights||0);
-      }
-      if(occChart)occChart.destroy();
-      occChart=new Chart(document.getElementById('occChart'),{type:'bar',data:{labels:mn,datasets:[{label:'Owner',data:od,backgroundColor:'#3498db'},{label:'Guest',data:gd,backgroundColor:'#9b59b6'},{label:'Rental',data:rd,backgroundColor:'#2ecc71'},{label:'Vacant',data:vd,backgroundColor:'#95a5a6'}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{color:'rgba(255,255,255,0.8)',boxWidth:12}}},scales:{x:{stacked:true,ticks:{color:'rgba(255,255,255,0.6)'}},y:{stacked:true,ticks:{color:'rgba(255,255,255,0.6)'},grid:{color:'rgba(255,255,255,0.1)'}}}}});
-    }
-    
-    function fmt(v){return'$'+(parseFloat(v)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
-    checkAuth();
-  </script>
-</body></html>`;
+// Serve index.html for all other routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
-app.get('/', (req, res) => res.send(dashboardHTML));
-initDB().then(() => app.listen(PORT, () => console.log('Villa Dashboard on port ' + PORT)));
+// Start server
+initDatabase().then(() => {
+  app.listen(PORT, () => {
+    console.log('Villa Dashboard running on port ' + PORT);
+  });
+});
