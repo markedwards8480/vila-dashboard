@@ -140,6 +140,21 @@ async function initDatabase() {
         processed BOOLEAN DEFAULT FALSE,
         processing_notes TEXT
       );
+      
+      CREATE TABLE IF NOT EXISTS occupancy_details (
+        id SERIAL PRIMARY KEY,
+        statement_id INTEGER REFERENCES monthly_statements(id) ON DELETE CASCADE,
+        activity_type VARCHAR(50),
+        check_in DATE,
+        check_out DATE,
+        num_nights INTEGER,
+        owner_nights INTEGER DEFAULT 0,
+        guest_nights INTEGER DEFAULT 0,
+        rental_nights INTEGER DEFAULT 0,
+        vacant_nights INTEGER DEFAULT 0,
+        revenue DECIMAL(12,2) DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
     `);
     
     const defaultPassword = process.env.DEFAULT_PASSWORD || 'villa2025';
@@ -173,6 +188,20 @@ function cleanNumber(str) {
   const cleaned = str.replace(/\$/g, '').replace(/\s+/g, '').replace(/,/g, '');
   const num = parseFloat(cleaned);
   return isNaN(num) ? 0 : num;
+}
+
+// Parse date like "19-Nov-25" to proper date
+function parseOccDate(dateStr, year) {
+  if (!dateStr) return null;
+  const months = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+  const match = dateStr.match(/(\d{1,2})-(\w{3})-(\d{2})/i);
+  if (match) {
+    const day = parseInt(match[1]);
+    const month = months[match[2].toLowerCase()];
+    const yr = 2000 + parseInt(match[3]);
+    return new Date(yr, month, day);
+  }
+  return null;
 }
 
 // Parse monthly statement PDF - Amanyara specific format
@@ -319,6 +348,37 @@ async function parseMonthlyStatement(buffer, filename) {
     });
   }
   
+  // Parse detailed occupancy from page 3 (Activity calendar)
+  // Format: "Vacant VA 01-Nov-25 19-Nov-25 1 8 - - - - 1 8"
+  // or "Villa Owner VO 19-Nov-25 23-Nov-25 4 4 - - - -"
+  result.occupancyDetails = [];
+  
+  const activityPatterns = [
+    { pattern: /Vacant\s+VA\s+(\d{1,2}-\w{3}-\d{2})\s+(\d{1,2}-\w{3}-\d{2})\s+(\d+)/gi, type: 'Vacant' },
+    { pattern: /Villa Owner\s+VO\s+(\d{1,2}-\w{3}-\d{2})\s+(\d{1,2}-\w{3}-\d{2})\s+(\d+)/gi, type: 'Owner' },
+    { pattern: /Villa Owner Guest\s+VOG\s+(\d{1,2}-\w{3}-\d{2})\s+(\d{1,2}-\w{3}-\d{2})\s+(\d+)/gi, type: 'Guest' },
+    { pattern: /Villa Rental\s+VR\s+(\d{1,2}-\w{3}-\d{2})\s+(\d{1,2}-\w{3}-\d{2})\s+(\d+)/gi, type: 'Rental' },
+  ];
+  
+  for (const { pattern, type } of activityPatterns) {
+    let match;
+    pattern.lastIndex = 0;
+    while ((match = pattern.exec(text)) !== null) {
+      const checkIn = match[1];
+      const checkOut = match[2];
+      const nights = parseInt(match[3]) || 0;
+      if (nights > 0) {
+        result.occupancyDetails.push({
+          type,
+          checkIn,
+          checkOut,
+          nights
+        });
+        console.log('Occupancy detail:', type, checkIn, '-', checkOut, nights, 'nights');
+      }
+    }
+  }
+  
   console.log('=== PARSING COMPLETE ===');
   console.log('Result summary:', {
     date: result.statementDate,
@@ -326,7 +386,8 @@ async function parseMonthlyStatement(buffer, filename) {
     occupancy: result.occupancy,
     totalExpenses: result.totalExpenses,
     expenseCount: result.expenses.length,
-    ownerRevenue: result.ownerRevenueShare
+    ownerRevenue: result.ownerRevenueShare,
+    occupancyDetailsCount: result.occupancyDetails.length
   });
   
   return result;
@@ -515,6 +576,26 @@ app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => 
             [statementId, utility.type, utility.consumption, utility.cost, utility.unit]
           );
         }
+        
+        // Save occupancy details
+        await pool.query('DELETE FROM occupancy_details WHERE statement_id = $1', [statementId]);
+        
+        for (const occ of (parseResult.occupancyDetails || [])) {
+          await pool.query(
+            'INSERT INTO occupancy_details (statement_id, activity_type, check_in, check_out, num_nights, owner_nights, guest_nights, rental_nights, vacant_nights) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+            [
+              statementId, 
+              occ.type, 
+              parseOccDate(occ.checkIn, parseResult.year),
+              parseOccDate(occ.checkOut, parseResult.year),
+              occ.nights,
+              occ.type === 'Owner' ? occ.nights : 0,
+              occ.type === 'Guest' ? occ.nights : 0,
+              occ.type === 'Rental' ? occ.nights : 0,
+              occ.type === 'Vacant' ? occ.nights : 0
+            ]
+          );
+        }
       }
     } else if (fileType === 'folio') {
       parseResult = await parseHotelFolio(buffer, originalname);
@@ -654,11 +735,18 @@ app.get('/api/statement/:id', requireAuth, async (req, res) => {
       [id]
     );
     
+    // Get occupancy details
+    const occupancyResult = await pool.query(
+      'SELECT * FROM occupancy_details WHERE statement_id = $1 ORDER BY check_in',
+      [id]
+    );
+    
     res.json({
       statement,
       expenses: expenseResult.rows,
       expensesByCategory: categoryResult.rows,
-      utilities: utilityResult.rows
+      utilities: utilityResult.rows,
+      occupancyDetails: occupancyResult.rows
     });
   } catch (err) {
     console.error('Statement fetch error:', err);
