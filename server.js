@@ -4,7 +4,7 @@ const multer = require('multer');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
-const pdfParse = require('pdf-parse');
+const XLSX = require('xlsx');
 const path = require('path');
 const Anthropic = require('@anthropic-ai/sdk');
 
@@ -48,17 +48,12 @@ async function initDatabase() {
         owner_nights INTEGER DEFAULT 0, guest_nights INTEGER DEFAULT 0,
         rental_nights INTEGER DEFAULT 0, vacant_nights INTEGER DEFAULT 0,
         rental_revenue DECIMAL(12,2) DEFAULT 0, owner_revenue_share DECIMAL(12,2) DEFAULT 0,
-        total_expenses DECIMAL(12,2) DEFAULT 0, raw_data JSONB,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(year, month)
+        total_expenses DECIMAL(12,2) DEFAULT 0, gross_revenue DECIMAL(12,2) DEFAULT 0,
+        raw_data JSONB, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(year, month)
       );
       CREATE TABLE IF NOT EXISTS expense_categories (
         id SERIAL PRIMARY KEY, statement_id INTEGER REFERENCES monthly_statements(id) ON DELETE CASCADE,
         category VARCHAR(100) NOT NULL, subcategory VARCHAR(100), amount DECIMAL(12,2) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-      CREATE TABLE IF NOT EXISTS utility_readings (
-        id SERIAL PRIMARY KEY, statement_id INTEGER REFERENCES monthly_statements(id) ON DELETE CASCADE,
-        utility_type VARCHAR(50) NOT NULL, consumption DECIMAL(12,2), cost DECIMAL(12,2), unit VARCHAR(20),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
       CREATE TABLE IF NOT EXISTS uploaded_files (
@@ -66,8 +61,10 @@ async function initDatabase() {
         upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP, processed BOOLEAN DEFAULT FALSE, processing_notes TEXT
       );
     `);
+    
+    // Add columns if they don't exist
     await client.query(`ALTER TABLE monthly_statements ADD COLUMN IF NOT EXISTS total_expenses DECIMAL(12,2) DEFAULT 0`);
-    await client.query(`ALTER TABLE monthly_statements ADD COLUMN IF NOT EXISTS rental_revenue DECIMAL(12,2) DEFAULT 0`);
+    await client.query(`ALTER TABLE monthly_statements ADD COLUMN IF NOT EXISTS gross_revenue DECIMAL(12,2) DEFAULT 0`);
     
     const defaultPassword = process.env.DEFAULT_PASSWORD || 'villa2025';
     const hashedPassword = await bcrypt.hash(defaultPassword, 10);
@@ -81,144 +78,177 @@ function requireAuth(req, res, next) {
   else res.status(401).json({ error: 'Unauthorized' });
 }
 
-function cleanNumber(str) {
-  if (!str) return 0;
-  const cleaned = str.replace(/\$/g, '').replace(/\s+/g, '').replace(/,/g, '');
-  return parseFloat(cleaned) || 0;
+// Get cell value, handling formulas by getting calculated value
+function getCellValue(sheet, cellRef) {
+  const cell = sheet[cellRef];
+  if (!cell) return null;
+  // If cell has a calculated value (v), use it; otherwise use raw value
+  return cell.v !== undefined ? cell.v : null;
 }
 
-// Extract first valid night count (0-31) from text after a label
-function extractNights(text, label) {
-  // Find the label and look at the text after it
-  const labelIndex = text.toLowerCase().indexOf(label.toLowerCase());
-  if (labelIndex === -1) {
-    console.log(`Label "${label}" not found`);
-    return 0;
-  }
+// Get numeric value from cell
+function getNumericValue(sheet, cellRef) {
+  const val = getCellValue(sheet, cellRef);
+  if (val === null || val === undefined || val === '') return 0;
+  const num = parseFloat(val);
+  return isNaN(num) ? 0 : num;
+}
+
+// Parse Excel file and extract all monthly data
+async function parseExcelStatement(buffer, filename) {
+  const workbook = XLSX.read(buffer, { type: 'buffer' });
   
-  // Get text starting from the label, up to 100 chars
-  const afterLabel = text.substring(labelIndex + label.length, labelIndex + label.length + 100);
-  console.log(`After "${label}":`, afterLabel.substring(0, 50));
+  console.log('=== PARSING EXCEL:', filename, '===');
+  console.log('Sheets:', workbook.SheetNames);
   
-  // Find all numbers (including decimals) - we want whole numbers 0-31
-  const numbers = afterLabel.match(/\d+\.?\d*/g);
-  if (!numbers) {
-    console.log(`No numbers found after "${label}"`);
-    return 0;
-  }
+  // Determine year from filename or sheet content
+  let year = new Date().getFullYear();
+  const yearMatch = filename.match(/(\d{4})/);
+  if (yearMatch) year = parseInt(yearMatch[1]);
   
-  console.log(`Numbers found after "${label}":`, numbers.slice(0, 5));
+  // Get the main statement sheet
+  const sheetName = workbook.SheetNames.find(n => n.toLowerCase().includes('owner') && n.toLowerCase().includes('statement')) 
+    || workbook.SheetNames[1] || workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
   
-  // Find first whole number between 0-31 (valid days in a month)
-  for (const numStr of numbers) {
-    // Skip if it has decimal (likely a YTD column with .00)
-    if (numStr.includes('.')) continue;
+  console.log('Using sheet:', sheetName);
+  
+  // Convert to array for easier parsing
+  const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+  
+  // Monthly columns: J=9, K=10, L=11, M=12, N=13, O=14, P=15, Q=16, R=17, S=18, T=19, U=20 (0-indexed)
+  // These correspond to months 1-12 (Jan-Dec)
+  const monthColumns = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]; // J through U
+  
+  // Find key rows by scanning for labels
+  let ownerRow = -1, guestRow = -1, rentalRow = -1, vacantRow = -1;
+  let revenueRow = -1, grossRevenueRow = -1;
+  let expenseRows = [];
+  
+  for (let i = 0; i < Math.min(data.length, 80); i++) {
+    const row = data[i];
+    if (!row) continue;
     
-    const num = parseInt(numStr);
-    if (num >= 0 && num <= 31) {
-      console.log(`Selected ${num} for "${label}"`);
-      return num;
+    const rowText = row.map(c => String(c || '').toLowerCase()).join(' ');
+    
+    // Occupancy rows
+    if (rowText.includes('villa owner usage') && !rowText.includes('guest')) ownerRow = i;
+    if (rowText.includes('villa owner guest')) guestRow = i;
+    if (rowText.includes('villa rental') && !rowText.includes('revenue') && !rowText.includes('credit')) rentalRow = i;
+    if (rowText.includes('vacant') && !rowText.includes('ooo')) vacantRow = i;
+    
+    // Revenue rows
+    if (rowText.includes('50%') && rowText.includes('owner') && rowText.includes('revenue')) revenueRow = i;
+    if (rowText.includes('gross villa revenue')) grossRevenueRow = i;
+    
+    // Expense rows - look for specific expense categories
+    if (rowText.includes('payroll') && rowText.includes('expense')) {
+      expenseRows.push({ row: i, category: 'Payroll', subcategory: 'Staff Payroll' });
+    }
+    if (rowText.includes('guest amenities')) {
+      expenseRows.push({ row: i, category: 'General Services', subcategory: 'Guest Amenities' });
+    }
+    if (rowText.includes('cleaning supplies')) {
+      expenseRows.push({ row: i, category: 'General Services', subcategory: 'Cleaning Supplies' });
+    }
+    if (rowText.includes('laundry') && !rowText.includes('total')) {
+      expenseRows.push({ row: i, category: 'General Services', subcategory: 'Laundry' });
+    }
+    if (rowText.includes('other operating') || rowText.includes('miscellaneous')) {
+      expenseRows.push({ row: i, category: 'General Services', subcategory: 'Other Operating' });
+    }
+    if (rowText.includes('contract services')) {
+      expenseRows.push({ row: i, category: 'Maintenance', subcategory: 'Contract Services' });
+    }
+    if (rowText.includes('electricity') && !rowText.includes('total')) {
+      expenseRows.push({ row: i, category: 'Utilities', subcategory: 'Electricity' });
+    }
+    if (rowText.includes('water') && !rowText.includes('total') && !rowText.includes('plant')) {
+      expenseRows.push({ row: i, category: 'Utilities', subcategory: 'Water' });
+    }
+    if (rowText.includes('telephone') || rowText.includes('internet') || rowText.includes('cable')) {
+      expenseRows.push({ row: i, category: 'General Services', subcategory: 'Telecom' });
+    }
+    if (rowText.includes('security')) {
+      expenseRows.push({ row: i, category: 'Security', subcategory: 'Security Program' });
+    }
+    if (rowText.includes('administration fee') || rowText.includes('admin fee') || rowText.includes('15%')) {
+      expenseRows.push({ row: i, category: 'Admin', subcategory: 'Admin Fee (15%)' });
+    }
+    if (rowText.includes('pool') && rowText.includes('maintenance')) {
+      expenseRows.push({ row: i, category: 'Maintenance', subcategory: 'Pool' });
+    }
+    if (rowText.includes('landscaping')) {
+      expenseRows.push({ row: i, category: 'Maintenance', subcategory: 'Landscaping' });
+    }
+    if (rowText.includes('maintenance program') || (rowText.includes('maintenance') && rowText.includes('materials'))) {
+      expenseRows.push({ row: i, category: 'Maintenance', subcategory: 'Maintenance Program' });
+    }
+    if (rowText.includes('insurance')) {
+      expenseRows.push({ row: i, category: 'Insurance', subcategory: 'Villa Insurance' });
+    }
+    if (rowText.includes('property tax')) {
+      expenseRows.push({ row: i, category: 'Taxes', subcategory: 'Property Tax' });
     }
   }
   
-  // If no valid number found, try the first number anyway
-  const firstNum = parseInt(numbers[0]);
-  console.log(`Fallback to first number: ${firstNum} for "${label}"`);
-  return firstNum >= 0 && firstNum <= 31 ? firstNum : 0;
-}
-
-async function parseMonthlyStatement(buffer, filename) {
-  const data = await pdfParse(buffer);
-  const text = data.text;
+  console.log('Found rows - Owner:', ownerRow, 'Guest:', guestRow, 'Rental:', rentalRow, 'Vacant:', vacantRow);
+  console.log('Revenue row:', revenueRow, 'Gross revenue row:', grossRevenueRow);
+  console.log('Expense rows:', expenseRows.length);
   
-  console.log('=== PARSING STATEMENT ===');
-  console.log('Filename:', filename);
-  console.log('Text length:', text.length);
+  // Extract data for each month
+  const results = [];
   
-  // Log the occupancy section
-  const occStart = text.toLowerCase().indexOf('villa owner');
-  if (occStart > -1) {
-    console.log('Occupancy section (200 chars):', text.substring(occStart, occStart + 200));
-  }
-  
-  const result = {
-    statementDate: null, year: null, month: null,
-    openingBalance: null, closingBalance: null,
-    occupancy: { ownerNights: 0, guestNights: 0, rentalNights: 0, vacantNights: 0 },
-    expenses: [], utilities: [],
-    rentalRevenue: 0, ownerRevenueShare: 0, totalExpenses: 0, rawText: text
-  };
-  
-  // Parse date from filename
-  const dateMatch = filename.match(/(\w+)[\s_-]*Statement[\s_-]*(\d{4})/i);
-  if (dateMatch) {
-    const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
-    const monthIdx = monthNames.findIndex(m => m.startsWith(dateMatch[1].toLowerCase()));
-    if (monthIdx !== -1) {
-      result.month = monthIdx + 1;
-      result.year = parseInt(dateMatch[2]);
-      result.statementDate = new Date(result.year, result.month - 1, 1);
+  for (let monthIdx = 0; monthIdx < 12; monthIdx++) {
+    const month = monthIdx + 1; // 1-12
+    const col = monthColumns[monthIdx];
+    
+    // Get occupancy values
+    const ownerNights = ownerRow >= 0 && data[ownerRow] ? Math.round(parseFloat(data[ownerRow][col]) || 0) : 0;
+    const guestNights = guestRow >= 0 && data[guestRow] ? Math.round(parseFloat(data[guestRow][col]) || 0) : 0;
+    const rentalNights = rentalRow >= 0 && data[rentalRow] ? Math.round(parseFloat(data[rentalRow][col]) || 0) : 0;
+    const vacantNights = vacantRow >= 0 && data[vacantRow] ? Math.round(parseFloat(data[vacantRow][col]) || 0) : 0;
+    
+    // Get revenue
+    const ownerRevenue = revenueRow >= 0 && data[revenueRow] ? parseFloat(data[revenueRow][col]) || 0 : 0;
+    const grossRevenue = grossRevenueRow >= 0 && data[grossRevenueRow] ? parseFloat(data[grossRevenueRow][col]) || 0 : 0;
+    
+    // Get expenses
+    const expenses = [];
+    let totalExpenses = 0;
+    
+    for (const expRow of expenseRows) {
+      if (data[expRow.row]) {
+        const amount = parseFloat(data[expRow.row][col]) || 0;
+        if (amount > 0) {
+          expenses.push({ category: expRow.category, subcategory: expRow.subcategory, amount });
+          totalExpenses += amount;
+        }
+      }
+    }
+    
+    // Only include months that have some data (not all zeros)
+    const hasData = ownerNights > 0 || guestNights > 0 || rentalNights > 0 || vacantNights > 0 || 
+                    ownerRevenue > 0 || totalExpenses > 0;
+    
+    if (hasData) {
+      results.push({
+        year,
+        month,
+        statementDate: new Date(year, month - 1, 1),
+        occupancy: { ownerNights, guestNights, rentalNights, vacantNights },
+        ownerRevenueShare: ownerRevenue,
+        grossRevenue,
+        totalExpenses,
+        expenses
+      });
+      
+      console.log(`Month ${month}: Owner=${ownerNights}, Guest=${guestNights}, Rental=${rentalNights}, Vacant=${vacantNights}, Revenue=${ownerRevenue.toFixed(2)}, Expenses=${totalExpenses.toFixed(2)}`);
     }
   }
   
-  // Parse closing balance
-  const balanceMatch = text.match(/(\d{1,3}(?:,\d{3})*\.\d{2})\$?\s*\n.*Beginning Balance/i);
-  if (balanceMatch) result.closingBalance = cleanNumber(balanceMatch[1]);
-  
-  // Parse occupancy using improved extraction
-  result.occupancy.ownerNights = extractNights(text, 'Villa Owner Usage');
-  result.occupancy.guestNights = extractNights(text, 'Villa Owner Guest');
-  result.occupancy.rentalNights = extractNights(text, 'Villa Rental');
-  result.occupancy.vacantNights = extractNights(text, 'Vacant');
-  
-  console.log('Final occupancy:', result.occupancy);
-  
-  // Parse revenue
-  const revenueMatch = text.match(/50% OWNER REVENUE\s*-?\s*([\d,]+\.?\d*)/i);
-  if (revenueMatch) result.ownerRevenueShare = cleanNumber(revenueMatch[1]);
-  
-  // Parse total expenses
-  const totalExpMatch = text.match(/TOTAL EXPENSES\s*([\d,]+\.\d{2})/i);
-  if (totalExpMatch) result.totalExpenses = cleanNumber(totalExpMatch[1]);
-  
-  // Parse individual expenses
-  const expensePatterns = [
-    { regex: /Contract Services\s*([\d,]+\.\d{2})/i, category: 'Maintenance', subcategory: 'Contract Services' },
-    { regex: /Electricity\s*([\d,]+\.\d{2})/i, category: 'Utilities', subcategory: 'Electricity' },
-    { regex: /Water\s*([\d,]+\.\d{2})/i, category: 'Utilities', subcategory: 'Water' },
-    { regex: /Cleaning supplies\s*([\d,]+\.\d{2})/i, category: 'General Services', subcategory: 'Cleaning Supplies' },
-    { regex: /Laundry\s*([\d,]+\.\d{2})/i, category: 'General Services', subcategory: 'Laundry' },
-    { regex: /Guest amenities\s*([\d,]+\.\d{2})/i, category: 'General Services', subcategory: 'Guest Amenities' },
-    { regex: /Telephone.*?Internet\s*([\d,]+\.\d{2})/i, category: 'General Services', subcategory: 'Telecom' },
-    { regex: /Security Program\s*([\d,]+\.\d{2})/i, category: 'Security', subcategory: 'Security Program' },
-    { regex: /15% Administration Fee\s*([\d,]+\.\d{2})/i, category: 'Admin', subcategory: 'Admin Fee (15%)' },
-    { regex: /Pest Control.*?Waste Removal\s*([\d,]+\.\d{2})/i, category: 'Maintenance', subcategory: 'Pest & Waste' },
-    { regex: /Maintenance Materials\s*([\d,]+\.\d{2})/i, category: 'Maintenance', subcategory: 'Materials' },
-    { regex: /Landscaping Program\s*([\d,]+\.\d{2})/i, category: 'Maintenance', subcategory: 'Landscaping' },
-    { regex: /Maintenance Program\s*([\d,]+\.\d{2})/i, category: 'Maintenance', subcategory: 'Maintenance Program' },
-    { regex: /Payroll & related Expenses\*?\s*([\d,]+\.\d{2})/i, category: 'Payroll', subcategory: 'Staff Payroll' },
-    { regex: /Pool Maintenance\s*([\d,]+\.\d{2})/i, category: 'Maintenance', subcategory: 'Pool' },
-    { regex: /A\/C Maintenance\s*([\d,]+\.\d{2})/i, category: 'Maintenance', subcategory: 'A/C' },
-    { regex: /General Maintenance\s*([\d,]+\.\d{2})/i, category: 'Maintenance', subcategory: 'General' },
-    { regex: /Villa Insurance\s*([\d,]+\.\d{2})/i, category: 'Insurance', subcategory: 'Villa Insurance' },
-    { regex: /Property Tax\s*([\d,]+\.\d{2})/i, category: 'Taxes', subcategory: 'Property Tax' },
-  ];
-  
-  for (const { regex, category, subcategory } of expensePatterns) {
-    const match = text.match(regex);
-    if (match) {
-      const amount = cleanNumber(match[1]);
-      if (amount > 0) result.expenses.push({ category, subcategory, amount });
-    }
-  }
-  
-  const electricityMatch = text.match(/Electricity\s*([\d,]+\.\d{2})/i);
-  const waterMatch = text.match(/Water\s*([\d,]+\.\d{2})/i);
-  if (electricityMatch) result.utilities.push({ type: 'Electricity', cost: cleanNumber(electricityMatch[1]) });
-  if (waterMatch) result.utilities.push({ type: 'Water', cost: cleanNumber(waterMatch[1]) });
-  
-  console.log('=== PARSING COMPLETE ===');
-  return result;
+  console.log('=== PARSED', results.length, 'MONTHS ===');
+  return results;
 }
 
 // API Routes
@@ -237,43 +267,26 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.post('/api/logout', (req, res) => { req.session.destroy(); res.json({ success: true }); });
-
 app.get('/api/auth/status', (req, res) => {
   res.json(req.session?.userId ? { authenticated: true, username: req.session.username } : { authenticated: false });
 });
 
-// Debug endpoint - get raw text from a statement
-app.get('/api/debug/statement/:id', requireAuth, async (req, res) => {
-  try {
-    const result = await pool.query('SELECT raw_data FROM monthly_statements WHERE id = $1', [req.params.id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
-    
-    const rawData = result.rows[0].raw_data;
-    const text = rawData?.text || '';
-    
-    // Find occupancy section
-    const occStart = text.toLowerCase().indexOf('villa owner');
-    const occSection = occStart > -1 ? text.substring(occStart, occStart + 500) : 'Not found';
-    
-    res.json({ 
-      textLength: text.length,
-      occupancySection: occSection,
-      first500: text.substring(0, 500)
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 app.get('/api/statements', requireAuth, async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT id, year, month, closing_balance, owner_nights, guest_nights, rental_nights, vacant_nights, 
-             owner_revenue_share, total_expenses FROM monthly_statements ORDER BY year DESC, month DESC
-    `);
+    const result = await pool.query(`SELECT id, year, month, closing_balance, owner_nights, guest_nights, rental_nights, vacant_nights, owner_revenue_share, total_expenses FROM monthly_statements ORDER BY year DESC, month DESC`);
     const years = [...new Set(result.rows.map(s => s.year))].sort((a,b) => b - a);
     res.json({ statements: result.rows, availableYears: years });
   } catch (err) { res.status(500).json({ error: 'Failed to fetch statements' }); }
+});
+
+// Delete all data endpoint
+app.delete('/api/statements/all', requireAuth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM expense_categories');
+    await pool.query('DELETE FROM monthly_statements');
+    await pool.query('DELETE FROM uploaded_files');
+    res.json({ success: true, message: 'All data cleared' });
+  } catch (err) { res.status(500).json({ error: 'Failed to clear data' }); }
 });
 
 app.get('/api/dashboard', requireAuth, async (req, res) => {
@@ -304,16 +317,13 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
     let expenses = [];
     if (statements.rows.length > 0) {
       const statementIds = statements.rows.map(s => s.id);
-      const expenseResult = await pool.query(`
-        SELECT ec.*, ms.year, ms.month FROM expense_categories ec
-        JOIN monthly_statements ms ON ec.statement_id = ms.id
-        WHERE ec.statement_id = ANY($1) ORDER BY ec.category, ec.subcategory, ms.year, ms.month
-      `, [statementIds]);
+      const expenseResult = await pool.query(`SELECT ec.*, ms.year, ms.month FROM expense_categories ec JOIN monthly_statements ms ON ec.statement_id = ms.id WHERE ec.statement_id = ANY($1) ORDER BY ec.category, ec.subcategory`, [statementIds]);
       expenses = expenseResult.rows;
     }
     
     const filesResult = await pool.query('SELECT * FROM uploaded_files ORDER BY upload_date DESC LIMIT 20');
     
+    // Calculate totals
     const totals = { totalBalance: 0, totalExpenses: 0, totalOwnerNights: 0, totalGuestNights: 0, totalRentalNights: 0, totalVacantNights: 0, totalRevenue: 0 };
     for (const s of statements.rows) {
       totals.totalExpenses += parseFloat(s.total_expenses) || 0;
@@ -360,15 +370,15 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
     let cumulative = 0;
     const paretoItems = allItems.map(item => { cumulative += item.pctOfTotal; return { ...item, cumulativePct: cumulative }; });
     
-    // Insights
-    const totalNights = totals.totalOwnerNights + totals.totalGuestNights + totals.totalRentalNights + totals.totalVacantNights;
+    // Insights - Occupied = Owner + Guest + Rental (NOT Vacant!)
     const occupiedNights = totals.totalOwnerNights + totals.totalGuestNights + totals.totalRentalNights;
+    const totalNightsInPeriod = occupiedNights + totals.totalVacantNights;
+    
     const insights = {
-      costPerNight: totalNights > 0 ? totals.totalExpenses / totalNights : 0,
+      occupiedNights,
+      vacantNights: totals.totalVacantNights,
       costPerOccupiedNight: occupiedNights > 0 ? totals.totalExpenses / occupiedNights : 0,
-      occupancyRate: totalNights > 0 ? (occupiedNights / totalNights * 100) : 0,
-      expenseToRevenueRatio: totals.totalRevenue > 0 ? (totals.totalExpenses / totals.totalRevenue * 100) : 0,
-      avgMonthlyExpense: statements.rows.length > 0 ? totals.totalExpenses / statements.rows.length : 0,
+      occupancyRate: totalNightsInPeriod > 0 ? (occupiedNights / totalNightsInPeriod * 100) : 0,
       netIncome: totals.totalRevenue - totals.totalExpenses
     };
     
@@ -378,7 +388,8 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
       insights.highestExpenseMonth = `${months[highestExpense.month]} ${highestExpense.year}`;
       insights.highestExpenseAmount = parseFloat(highestExpense.total_expenses) || 0;
       
-      const lowestExpense = statements.rows.reduce((min, s) => (parseFloat(s.total_expenses) || 0) < (parseFloat(min.total_expenses) || 0) ? s : min);
+      const lowestExpense = statements.rows.filter(s => parseFloat(s.total_expenses) > 0)
+        .reduce((min, s) => (parseFloat(s.total_expenses) || Infinity) < (parseFloat(min.total_expenses) || Infinity) ? s : min, statements.rows[0]);
       insights.lowestExpenseMonth = `${months[lowestExpense.month]} ${lowestExpense.year}`;
       insights.lowestExpenseAmount = parseFloat(lowestExpense.total_expenses) || 0;
       
@@ -396,75 +407,97 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
 });
 
 app.post('/api/ai/chat', requireAuth, async (req, res) => {
-  if (!anthropic) return res.status(400).json({ error: 'AI not configured. Add ANTHROPIC_API_KEY to environment variables.' });
+  if (!anthropic) return res.status(400).json({ error: 'AI not configured. Add ANTHROPIC_API_KEY.' });
   const { question } = req.body;
-  if (!question) return res.status(400).json({ error: 'No question provided' });
+  if (!question) return res.status(400).json({ error: 'No question' });
   
   try {
-    const statementsResult = await pool.query(`SELECT year, month, closing_balance, owner_nights, guest_nights, rental_nights, vacant_nights, owner_revenue_share, total_expenses FROM monthly_statements ORDER BY year, month`);
-    const expensesResult = await pool.query(`SELECT ec.category, ec.subcategory, ec.amount, ms.year, ms.month FROM expense_categories ec JOIN monthly_statements ms ON ec.statement_id = ms.id ORDER BY ms.year, ms.month, ec.category`);
-    
+    const stmts = await pool.query(`SELECT year, month, owner_nights, guest_nights, rental_nights, vacant_nights, owner_revenue_share, total_expenses FROM monthly_statements ORDER BY year, month`);
     const months = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    let dataSummary = "VILLA 8 AMANYARA FINANCIAL DATA:\n\nMONTHLY STATEMENTS:\n";
-    for (const s of statementsResult.rows) {
-      dataSummary += `${months[s.month]} ${s.year}: Balance=$${s.closing_balance}, Expenses=$${s.total_expenses}, Revenue=$${s.owner_revenue_share}, Owner=${s.owner_nights}, Guest=${s.guest_nights}, Rental=${s.rental_nights}, Vacant=${s.vacant_nights}\n`;
+    let summary = "VILLA 8 AMANYARA FINANCIAL DATA:\n\n";
+    for (const s of stmts.rows) {
+      summary += `${months[s.month]} ${s.year}: Expenses=$${parseFloat(s.total_expenses).toFixed(2)}, Revenue=$${parseFloat(s.owner_revenue_share).toFixed(2)}, Owner=${s.owner_nights} nights, Guest=${s.guest_nights} nights, Rental=${s.rental_nights} nights, Vacant=${s.vacant_nights} nights\n`;
     }
-    dataSummary += "\nEXPENSES BY MONTH:\n";
-    let currentMonth = '';
-    for (const e of expensesResult.rows) {
-      const monthLabel = `${months[e.month]} ${e.year}`;
-      if (monthLabel !== currentMonth) { currentMonth = monthLabel; dataSummary += `\n${monthLabel}:\n`; }
-      dataSummary += `  - ${e.category}/${e.subcategory}: $${e.amount}\n`;
-    }
-    
-    let totalExp = 0, totalRev = 0, totalOwner = 0, totalGuest = 0, totalRental = 0, totalVacant = 0;
-    for (const s of statementsResult.rows) {
-      totalExp += parseFloat(s.total_expenses) || 0; totalRev += parseFloat(s.owner_revenue_share) || 0;
-      totalOwner += parseInt(s.owner_nights) || 0; totalGuest += parseInt(s.guest_nights) || 0;
-      totalRental += parseInt(s.rental_nights) || 0; totalVacant += parseInt(s.vacant_nights) || 0;
-    }
-    dataSummary += `\nTOTALS (${statementsResult.rows.length} months): Expenses=$${totalExp.toFixed(2)}, Revenue=$${totalRev.toFixed(2)}, Net=$${(totalRev-totalExp).toFixed(2)}, Owner=${totalOwner}, Guest=${totalGuest}, Rental=${totalRental}, Vacant=${totalVacant}\n`;
     
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514", max_tokens: 1024,
-      system: `You are a financial analyst for Villa 8 at Amanyara resort. Answer questions about the villa's finances concisely with specific numbers and dates.`,
-      messages: [{ role: "user", content: `Data:\n${dataSummary}\n\nQuestion: ${question}` }]
+      system: `You are a financial analyst for Villa 8 at Amanyara resort in Turks & Caicos. Analyze the data and answer questions concisely with specific numbers.`,
+      messages: [{ role: "user", content: `${summary}\n\nQuestion: ${question}` }]
     });
     
-    res.json({ answer: message.content[0].type === 'text' ? message.content[0].text : 'Unable to generate response' });
-  } catch (err) { console.error('AI error:', err); res.status(500).json({ error: 'Failed: ' + err.message }); }
+    res.json({ answer: message.content[0].text || 'No response' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Upload Excel file - parses ALL months from YTD file
 app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  if (!req.file) return res.status(400).json({ error: 'No file' });
   const { originalname, buffer, size } = req.file;
   
   try {
-    const uploadResult = await pool.query('INSERT INTO uploaded_files (filename, file_type, file_size) VALUES ($1, $2, $3) RETURNING id', [originalname, 'statement', size]);
-    const parseResult = await parseMonthlyStatement(buffer, originalname);
+    // Record the upload
+    await pool.query('INSERT INTO uploaded_files (filename, file_type, file_size, processed, processing_notes) VALUES ($1, $2, $3, $4, $5)', 
+      [originalname, 'excel', size, true, 'Processing...']);
     
-    if (parseResult.year && parseResult.month) {
-      const statementResult = await pool.query(`
-        INSERT INTO monthly_statements (statement_date, year, month, closing_balance, owner_nights, guest_nights, rental_nights, vacant_nights, rental_revenue, owner_revenue_share, total_expenses, raw_data)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-        ON CONFLICT (year, month) DO UPDATE SET closing_balance=EXCLUDED.closing_balance, owner_nights=EXCLUDED.owner_nights, guest_nights=EXCLUDED.guest_nights, rental_nights=EXCLUDED.rental_nights, vacant_nights=EXCLUDED.vacant_nights, rental_revenue=EXCLUDED.rental_revenue, owner_revenue_share=EXCLUDED.owner_revenue_share, total_expenses=EXCLUDED.total_expenses, raw_data=EXCLUDED.raw_data
-        RETURNING id
-      `, [parseResult.statementDate, parseResult.year, parseResult.month, parseResult.closingBalance, parseResult.occupancy.ownerNights, parseResult.occupancy.guestNights, parseResult.occupancy.rentalNights, parseResult.occupancy.vacantNights, parseResult.rentalRevenue, parseResult.ownerRevenueShare, parseResult.totalExpenses, { text: parseResult.rawText }]);
-      
-      const statementId = statementResult.rows[0].id;
-      await pool.query('DELETE FROM expense_categories WHERE statement_id = $1', [statementId]);
-      for (const expense of parseResult.expenses) {
-        await pool.query('INSERT INTO expense_categories (statement_id, category, subcategory, amount) VALUES ($1, $2, $3, $4)', [statementId, expense.category, expense.subcategory, expense.amount]);
-      }
-      await pool.query('DELETE FROM utility_readings WHERE statement_id = $1', [statementId]);
-      for (const utility of parseResult.utilities) {
-        await pool.query('INSERT INTO utility_readings (statement_id, utility_type, cost) VALUES ($1, $2, $3)', [statementId, utility.type, utility.cost]);
-      }
+    // Parse Excel file - returns array of monthly data
+    const monthlyData = await parseExcelStatement(buffer, originalname);
+    
+    if (monthlyData.length === 0) {
+      return res.status(400).json({ error: 'Could not parse any monthly data from file' });
     }
     
-    await pool.query('UPDATE uploaded_files SET processed = true WHERE id = $1', [uploadResult.rows[0].id]);
-    res.json({ success: true, parsed: parseResult });
-  } catch (err) { console.error('Upload error:', err); res.status(500).json({ error: 'Failed to process file' }); }
+    // Store each month
+    const savedMonths = [];
+    for (const monthData of monthlyData) {
+      const stmtResult = await pool.query(`
+        INSERT INTO monthly_statements (statement_date, year, month, owner_nights, guest_nights, rental_nights, vacant_nights, owner_revenue_share, total_expenses, raw_data)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        ON CONFLICT (year, month) DO UPDATE SET 
+          owner_nights=EXCLUDED.owner_nights, guest_nights=EXCLUDED.guest_nights, 
+          rental_nights=EXCLUDED.rental_nights, vacant_nights=EXCLUDED.vacant_nights, 
+          owner_revenue_share=EXCLUDED.owner_revenue_share, total_expenses=EXCLUDED.total_expenses,
+          raw_data=EXCLUDED.raw_data
+        RETURNING id
+      `, [monthData.statementDate, monthData.year, monthData.month, 
+          monthData.occupancy.ownerNights, monthData.occupancy.guestNights, 
+          monthData.occupancy.rentalNights, monthData.occupancy.vacantNights, 
+          monthData.ownerRevenueShare, monthData.totalExpenses, 
+          { parsed: monthData }]);
+      
+      const stmtId = stmtResult.rows[0].id;
+      
+      // Clear old expenses and add new ones
+      await pool.query('DELETE FROM expense_categories WHERE statement_id = $1', [stmtId]);
+      for (const exp of monthData.expenses) {
+        await pool.query('INSERT INTO expense_categories (statement_id, category, subcategory, amount) VALUES ($1, $2, $3, $4)', 
+          [stmtId, exp.category, exp.subcategory, exp.amount]);
+      }
+      
+      savedMonths.push({
+        month: monthData.month,
+        year: monthData.year,
+        owner: monthData.occupancy.ownerNights,
+        guest: monthData.occupancy.guestNights,
+        rental: monthData.occupancy.rentalNights,
+        vacant: monthData.occupancy.vacantNights,
+        revenue: monthData.ownerRevenueShare,
+        expenses: monthData.totalExpenses
+      });
+    }
+    
+    // Update upload record
+    await pool.query('UPDATE uploaded_files SET processing_notes = $1 WHERE filename = $2', 
+      [`Parsed ${savedMonths.length} months`, originalname]);
+    
+    res.json({ 
+      success: true, 
+      message: `Parsed ${savedMonths.length} months from ${originalname}`,
+      months: savedMonths 
+    });
+  } catch (err) { 
+    console.error('Upload error:', err); 
+    res.status(500).json({ error: 'Failed: ' + err.message }); 
+  }
 });
 
-initDatabase().then(() => app.listen(PORT, () => console.log('Villa Dashboard running on port ' + PORT)));
+initDatabase().then(() => app.listen(PORT, () => console.log('Villa Dashboard on port ' + PORT)));
