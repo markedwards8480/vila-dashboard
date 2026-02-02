@@ -8,7 +8,20 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    :root { --primary: #1a3a4a; --primary-light: #2d5a6e; --accent: #c9a962; --text: #1a1a1a; --text-light: #666; --card-bg: rgba(255,255,255,0.85); --glass-border: rgba(255,255,255,0.3); --shadow: 0 8px 32px rgba(0,0,0,0.1); }
+    :root { 
+      --primary: #1a3a4a; 
+      --primary-light: #2d5a6e; 
+      --accent: #c9a962; 
+      --text: #1a1a1a; 
+      --text-light: #666; 
+      --card-bg: rgba(255,255,255,0.9); 
+      --glass-border: rgba(255,255,255,0.3); 
+      --shadow: 0 8px 32px rgba(0,0,0,0.1);
+      --owner-color: #2d5a6e;
+      --guest-color: #c9a962;
+      --rental-color: #4a9e6e;
+      --vacant-color: #999;
+    }
     body { font-family: 'Montserrat', sans-serif; background: linear-gradient(135deg, #e8e4dc 0%, #d4cfc4 50%, #c9c4b8 100%); min-height: 100vh; color: var(--text); }
     h1,h2,h3 { font-family: 'Cormorant Garamond', serif; font-weight: 400; }
     
@@ -21,11 +34,10 @@
     .form-group { margin-bottom: 1.5rem; }
     .form-group label { display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-light); margin-bottom: 0.5rem; }
     .form-group input, .form-group select { width: 100%; padding: 1rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 12px; font-family: inherit; font-size: 1rem; background: white; }
-    .form-group input:focus { outline: none; border-color: var(--accent); }
+    .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--accent); }
     .btn { padding: 1rem 2rem; border: none; border-radius: 12px; font-family: inherit; font-size: 0.9rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.15em; cursor: pointer; transition: all 0.3s; }
     .btn-primary { background: var(--primary); color: white; width: 100%; }
     .btn-primary:hover { background: var(--primary-light); }
-    .btn-secondary { background: transparent; border: 1px solid var(--primary); color: var(--primary); }
     .error-message { background: #fee; color: #c00; padding: 0.75rem; border-radius: 8px; margin-bottom: 1rem; display: none; font-size: 0.9rem; }
     
     /* Dashboard Layout */
@@ -38,18 +50,18 @@
     .header-brand { display: flex; align-items: center; gap: 1rem; }
     .header-brand h1 { font-size: 1.5rem; color: var(--primary); }
     .header-brand span { font-size: 0.7rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.2em; background: rgba(201,169,98,0.15); padding: 0.35rem 0.75rem; border-radius: 4px; }
-    .header-actions { display: flex; align-items: center; gap: 0.5rem; }
+    .header-actions { display: flex; align-items: center; gap: 1rem; }
     .header-btn { padding: 0.5rem 1rem; border: 1px solid var(--glass-border); border-radius: 8px; background: transparent; font-family: inherit; font-size: 0.8rem; cursor: pointer; transition: all 0.3s; }
     .header-btn:hover { background: var(--primary); color: white; }
     
     /* Main Content */
-    .main-content { padding: 2rem; max-width: 1600px; margin: 0 auto; }
+    .main-content { padding: 2rem; max-width: 1800px; margin: 0 auto; }
     
-    /* Statement Selector */
-    .statement-selector { background: var(--card-bg); border-radius: 16px; padding: 1.25rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem; box-shadow: var(--shadow); flex-wrap: wrap; }
-    .statement-selector label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-light); }
-    .statement-selector select { flex: 1; max-width: 300px; padding: 0.75rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; font-family: inherit; background: white; }
-    .statement-count { font-size: 0.8rem; color: var(--text-light); margin-left: auto; }
+    /* View Selector */
+    .view-selector { background: var(--card-bg); border-radius: 16px; padding: 1.25rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1.5rem; box-shadow: var(--shadow); flex-wrap: wrap; }
+    .view-selector label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-light); }
+    .view-selector select { padding: 0.75rem 1rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; font-family: inherit; background: white; min-width: 200px; }
+    .view-info { font-size: 0.85rem; color: var(--text-light); margin-left: auto; }
     
     /* Tabs */
     .tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; background: var(--card-bg); border-radius: 12px; padding: 0.5rem; box-shadow: var(--shadow); flex-wrap: wrap; }
@@ -60,13 +72,17 @@
     .tab-content.active { display: block; }
     
     /* KPI Cards */
-    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
-    .kpi-card { background: var(--card-bg); border-radius: 20px; padding: 1.5rem; box-shadow: var(--shadow); }
-    .kpi-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-light); margin-bottom: 0.5rem; }
-    .kpi-value { font-family: 'Cormorant Garamond', serif; font-size: 2.25rem; font-weight: 500; color: var(--primary); }
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.25rem; margin-bottom: 2rem; }
+    .kpi-card { background: var(--card-bg); border-radius: 20px; padding: 1.25rem; box-shadow: var(--shadow); }
+    .kpi-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-light); margin-bottom: 0.5rem; }
+    .kpi-value { font-family: 'Cormorant Garamond', serif; font-size: 1.75rem; font-weight: 500; color: var(--primary); }
     .kpi-value.accent { color: var(--accent); }
     .kpi-value.negative { color: #c75050; }
-    .kpi-change { font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem; }
+    .kpi-value.owner { color: var(--owner-color); }
+    .kpi-value.guest { color: var(--guest-color); }
+    .kpi-value.rental { color: var(--rental-color); }
+    .kpi-value.vacant { color: var(--vacant-color); }
+    .kpi-change { font-size: 0.7rem; color: var(--text-light); margin-top: 0.25rem; }
     
     /* Charts */
     .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
@@ -74,36 +90,47 @@
     .chart-card h3 { font-size: 1.1rem; color: var(--primary); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(0,0,0,0.05); }
     .chart-container { position: relative; height: 280px; }
     
-    /* Occupancy Calendar */
-    .occupancy-section { background: var(--card-bg); border-radius: 20px; padding: 1.5rem; box-shadow: var(--shadow); margin-bottom: 1.5rem; }
-    .occupancy-section h3 { font-size: 1.1rem; color: var(--primary); margin-bottom: 1rem; }
-    .occupancy-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-    .occ-stat { text-align: center; padding: 1rem; background: rgba(0,0,0,0.02); border-radius: 12px; }
-    .occ-stat-value { font-size: 1.75rem; font-family: 'Cormorant Garamond', serif; font-weight: 600; }
-    .occ-stat-value.owner { color: #2d5a6e; }
-    .occ-stat-value.guest { color: #c9a962; }
-    .occ-stat-value.rental { color: #4a9e6e; }
-    .occ-stat-value.vacant { color: #999; }
-    .occ-stat-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-light); margin-top: 0.25rem; }
-    .calendar-legend { display: flex; gap: 1.5rem; margin-top: 1rem; flex-wrap: wrap; justify-content: center; }
-    .legend-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; }
-    .legend-color { width: 16px; height: 16px; border-radius: 4px; }
-    .legend-color.owner { background: #2d5a6e; }
-    .legend-color.guest { background: #c9a962; }
-    .legend-color.rental { background: #4a9e6e; }
-    .legend-color.vacant { background: #e0ddd5; }
+    /* Occupancy Section */
+    .occupancy-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
+    .occ-card { background: var(--card-bg); border-radius: 16px; padding: 1.5rem; box-shadow: var(--shadow); text-align: center; }
+    .occ-card.owner { border-left: 4px solid var(--owner-color); }
+    .occ-card.guest { border-left: 4px solid var(--guest-color); }
+    .occ-card.rental { border-left: 4px solid var(--rental-color); }
+    .occ-card.vacant { border-left: 4px solid var(--vacant-color); }
+    .occ-value { font-family: 'Cormorant Garamond', serif; font-size: 2.5rem; font-weight: 600; }
+    .occ-card.owner .occ-value { color: var(--owner-color); }
+    .occ-card.guest .occ-value { color: var(--guest-color); }
+    .occ-card.rental .occ-value { color: var(--rental-color); }
+    .occ-card.vacant .occ-value { color: var(--vacant-color); }
+    .occ-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-light); margin-top: 0.5rem; }
+    .occ-pct { font-size: 0.85rem; color: var(--text-light); margin-top: 0.25rem; }
     
-    /* Expense Breakdown */
-    .expense-breakdown { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-    .expense-card { background: var(--card-bg); border-radius: 20px; padding: 1.5rem; box-shadow: var(--shadow); }
-    .expense-card h3 { font-size: 1.1rem; color: var(--primary); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(0,0,0,0.05); }
-    .expense-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid rgba(0,0,0,0.05); }
+    /* Expense Categories */
+    .expense-section { background: var(--card-bg); border-radius: 20px; padding: 1.5rem; box-shadow: var(--shadow); margin-bottom: 1.5rem; }
+    .expense-section h3 { font-size: 1.1rem; color: var(--primary); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(0,0,0,0.05); }
+    .expense-category { margin-bottom: 1.5rem; }
+    .expense-category-header { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; background: rgba(0,0,0,0.03); border-radius: 8px; cursor: pointer; }
+    .expense-category-header:hover { background: rgba(0,0,0,0.05); }
+    .expense-category-name { font-weight: 600; font-size: 0.9rem; }
+    .expense-category-total { font-weight: 600; color: var(--accent); }
+    .expense-items { padding: 0.5rem 1rem; }
+    .expense-item { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid rgba(0,0,0,0.05); font-size: 0.85rem; }
     .expense-item:last-child { border-bottom: none; }
-    .expense-name { font-size: 0.85rem; }
-    .expense-amount { font-weight: 600; color: var(--primary); }
-    .expense-total { margin-top: 1rem; padding-top: 1rem; border-top: 2px solid var(--accent); display: flex; justify-content: space-between; }
-    .total-label { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; }
-    .total-amount { font-size: 1.2rem; color: var(--accent); font-weight: 600; }
+    .expense-total-row { display: flex; justify-content: space-between; padding: 1rem; background: var(--primary); color: white; border-radius: 8px; margin-top: 1rem; }
+    .expense-total-row .label { font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; }
+    .expense-total-row .amount { font-size: 1.25rem; font-weight: 600; }
+    
+    /* Multi-Month Table */
+    .month-table-container { overflow-x: auto; margin-bottom: 1.5rem; }
+    .month-table { width: 100%; border-collapse: collapse; background: var(--card-bg); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+    .month-table th, .month-table td { padding: 0.75rem 1rem; text-align: right; border-bottom: 1px solid rgba(0,0,0,0.05); }
+    .month-table th { background: var(--primary); color: white; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }
+    .month-table th:first-child, .month-table td:first-child { text-align: left; position: sticky; left: 0; background: inherit; }
+    .month-table td:first-child { font-weight: 500; }
+    .month-table tr:hover { background: rgba(201,169,98,0.05); }
+    .month-table .total-row { background: rgba(0,0,0,0.03); font-weight: 600; }
+    .month-table .category-row { background: rgba(0,0,0,0.02); }
+    .month-table .category-row td:first-child { font-weight: 600; color: var(--primary); }
     
     /* Upload Section */
     .upload-section { background: var(--card-bg); border-radius: 20px; padding: 1.5rem; box-shadow: var(--shadow); max-width: 600px; }
@@ -125,22 +152,20 @@
     .recent-files h4 { font-size: 0.9rem; color: var(--text-light); margin-bottom: 0.75rem; }
     .file-list { max-height: 200px; overflow-y: auto; }
     .file-item { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid rgba(0,0,0,0.05); font-size: 0.85rem; }
-    .file-name { color: var(--primary); }
-    .file-date { color: var(--text-light); }
     
     /* Responsive */
+    @media (max-width: 1200px) { .occupancy-grid { grid-template-columns: repeat(2, 1fr); } }
     @media (max-width: 900px) {
-      .expense-breakdown { grid-template-columns: 1fr; }
       .charts-grid { grid-template-columns: 1fr; }
       .header { flex-direction: column; gap: 1rem; }
-      .statement-selector { flex-direction: column; align-items: stretch; }
-      .statement-selector select { max-width: 100%; }
+      .view-selector { flex-direction: column; align-items: stretch; }
+      .view-selector select { width: 100%; }
+      .occupancy-grid { grid-template-columns: 1fr 1fr; }
     }
+    @media (max-width: 600px) { .occupancy-grid { grid-template-columns: 1fr; } .kpi-grid { grid-template-columns: 1fr 1fr; } }
     
-    /* Loading State */
+    /* Loading */
     .loading { opacity: 0.6; pointer-events: none; }
-    .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid rgba(0,0,0,0.1); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -180,13 +205,28 @@
     </header>
 
     <main class="main-content">
-      <!-- Statement Selector -->
-      <div class="statement-selector">
-        <label>Viewing:</label>
-        <select id="statementSelect" onchange="loadStatementData()">
-          <option value="">Loading statements...</option>
-        </select>
-        <span class="statement-count" id="statementCount"></span>
+      <!-- View Selector -->
+      <div class="view-selector">
+        <div>
+          <label>View Mode</label>
+          <select id="viewMode" onchange="changeViewMode()">
+            <option value="single">Individual Month</option>
+            <option value="rolling12">Rolling 12 Months</option>
+          </select>
+        </div>
+        <div id="monthSelectorContainer">
+          <label>Month</label>
+          <select id="monthSelect" onchange="loadMonthData()">
+            <option value="">Loading...</option>
+          </select>
+        </div>
+        <div id="yearSelectorContainer" style="display:none;">
+          <label>Year</label>
+          <select id="yearSelect" onchange="loadYearData()">
+            <option value="">Loading...</option>
+          </select>
+        </div>
+        <span class="view-info" id="viewInfo"></span>
       </div>
 
       <!-- Tabs -->
@@ -194,6 +234,7 @@
         <button class="tab-btn active" data-tab="overview">Overview</button>
         <button class="tab-btn" data-tab="occupancy">Occupancy</button>
         <button class="tab-btn" data-tab="expenses">Expenses</button>
+        <button class="tab-btn" data-tab="details">Expense Details</button>
         <button class="tab-btn" data-tab="upload">Upload</button>
       </div>
 
@@ -203,22 +244,34 @@
           <div class="kpi-card">
             <div class="kpi-label">Current Balance</div>
             <div class="kpi-value" id="kpiBalance">--</div>
-            <div class="kpi-change" id="kpiBalanceChange"></div>
           </div>
           <div class="kpi-card">
             <div class="kpi-label">Total Expenses</div>
             <div class="kpi-value accent" id="kpiExpenses">--</div>
-            <div class="kpi-change" id="kpiExpensesChange"></div>
           </div>
           <div class="kpi-card">
             <div class="kpi-label">Owner Nights</div>
-            <div class="kpi-value" id="kpiOwnerNights">--</div>
-            <div class="kpi-change">This month</div>
+            <div class="kpi-value owner" id="kpiOwnerNights">--</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Rental Revenue</div>
+            <div class="kpi-label">Guest Nights</div>
+            <div class="kpi-value guest" id="kpiGuestNights">--</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Rental Nights</div>
+            <div class="kpi-value rental" id="kpiRentalNights">--</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Vacant Nights</div>
+            <div class="kpi-value vacant" id="kpiVacantNights">--</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Owner Revenue (50%)</div>
             <div class="kpi-value accent" id="kpiRevenue">--</div>
-            <div class="kpi-change">Owner share (50%)</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Total Nights</div>
+            <div class="kpi-value" id="kpiTotalNights">--</div>
           </div>
         </div>
 
@@ -240,70 +293,79 @@
 
       <!-- Occupancy Tab -->
       <div class="tab-content" id="tab-occupancy">
-        <div class="occupancy-section">
-          <h3>Occupancy Summary</h3>
-          <div class="occupancy-summary">
-            <div class="occ-stat">
-              <div class="occ-stat-value owner" id="occOwner">--</div>
-              <div class="occ-stat-label">Owner Nights</div>
-            </div>
-            <div class="occ-stat">
-              <div class="occ-stat-value guest" id="occGuest">--</div>
-              <div class="occ-stat-label">Guest Nights</div>
-            </div>
-            <div class="occ-stat">
-              <div class="occ-stat-value rental" id="occRental">--</div>
-              <div class="occ-stat-label">Rental Nights</div>
-            </div>
-            <div class="occ-stat">
-              <div class="occ-stat-value vacant" id="occVacant">--</div>
-              <div class="occ-stat-label">Vacant Nights</div>
-            </div>
+        <div class="occupancy-grid">
+          <div class="occ-card owner">
+            <div class="occ-value" id="occOwner">--</div>
+            <div class="occ-label">Owner Nights</div>
+            <div class="occ-pct" id="occOwnerPct">--</div>
           </div>
-          <div class="calendar-legend">
-            <div class="legend-item"><div class="legend-color owner"></div> Owner</div>
-            <div class="legend-item"><div class="legend-color guest"></div> Guest</div>
-            <div class="legend-item"><div class="legend-color rental"></div> Rental</div>
-            <div class="legend-item"><div class="legend-color vacant"></div> Vacant</div>
+          <div class="occ-card guest">
+            <div class="occ-value" id="occGuest">--</div>
+            <div class="occ-label">Guest Nights</div>
+            <div class="occ-pct" id="occGuestPct">--</div>
+          </div>
+          <div class="occ-card rental">
+            <div class="occ-value" id="occRental">--</div>
+            <div class="occ-label">Rental Nights</div>
+            <div class="occ-pct" id="occRentalPct">--</div>
+          </div>
+          <div class="occ-card vacant">
+            <div class="occ-value" id="occVacant">--</div>
+            <div class="occ-label">Vacant Nights</div>
+            <div class="occ-pct" id="occVacantPct">--</div>
           </div>
         </div>
 
         <div class="chart-card">
           <h3>Monthly Occupancy Breakdown</h3>
-          <div class="chart-container">
+          <div class="chart-container" style="height: 350px;">
             <canvas id="occupancyBarChart"></canvas>
           </div>
         </div>
+        
+        <div id="occupancyTable" class="month-table-container" style="margin-top: 1.5rem;"></div>
       </div>
 
       <!-- Expenses Tab -->
       <div class="tab-content" id="tab-expenses">
-        <div class="expense-breakdown">
-          <div class="expense-card">
-            <h3>Expense Categories</h3>
-            <div id="expenseList"></div>
-            <div class="expense-total">
-              <span class="total-label">Total Expenses</span>
-              <span class="total-amount" id="expenseTotal">--</span>
-            </div>
+        <div class="expense-section">
+          <h3>Expense Summary by Category</h3>
+          <div id="expenseSummary"></div>
+          <div class="expense-total-row">
+            <span class="label">Total Expenses</span>
+            <span class="amount" id="expenseTotalAmount">--</span>
           </div>
-          <div class="expense-card">
-            <h3>Expense Breakdown</h3>
+        </div>
+        
+        <div class="charts-grid">
+          <div class="chart-card">
+            <h3>Expenses by Category</h3>
             <div class="chart-container">
               <canvas id="expensePieChart"></canvas>
             </div>
           </div>
+          <div class="chart-card">
+            <h3>Monthly Expense Trend by Category</h3>
+            <div class="chart-container">
+              <canvas id="expenseStackedChart"></canvas>
+            </div>
+          </div>
         </div>
+      </div>
+
+      <!-- Expense Details Tab -->
+      <div class="tab-content" id="tab-details">
+        <div id="expenseDetailsContainer"></div>
       </div>
 
       <!-- Upload Tab -->
       <div class="tab-content" id="tab-upload">
         <div class="upload-section">
-          <h3>Upload Statement</h3>
+          <h3>Upload Monthly Statement</h3>
           <div class="upload-zone" id="uploadZone">
             <div class="upload-icon">📄</div>
             <p class="upload-text"><strong>Click to upload</strong> or drag and drop</p>
-            <p class="upload-text">PDF files (Monthly Statements)</p>
+            <p class="upload-text">Amanyara Monthly Statement PDFs</p>
           </div>
           <input type="file" id="fileInput" class="file-input" accept=".pdf">
           <div class="upload-status" id="uploadStatus"></div>
@@ -321,7 +383,10 @@
     // State
     let currentUser = null;
     let dashboardData = null;
+    let allStatements = [];
+    let availableYears = [];
     let charts = {};
+    let currentView = 'single';
 
     // Check auth on load
     async function checkAuth() {
@@ -378,143 +443,500 @@
       document.getElementById('loginContainer').classList.add('hidden');
       document.getElementById('dashboard').classList.add('active');
       document.getElementById('welcomeUser').textContent = `Welcome, ${currentUser}`;
-      await loadDashboardData();
+      await loadInitialData();
+    }
+
+    // Load initial data
+    async function loadInitialData() {
+      try {
+        const res = await fetch('/api/statements');
+        const data = await res.json();
+        allStatements = data.statements || [];
+        
+        // Get unique years
+        availableYears = [...new Set(allStatements.map(s => s.year))].sort((a,b) => b - a);
+        
+        populateSelectors();
+        await loadDashboardData();
+      } catch (err) {
+        console.error('Failed to load initial data:', err);
+      }
+    }
+
+    // Populate selectors
+    function populateSelectors() {
+      const monthSelect = document.getElementById('monthSelect');
+      const yearSelect = document.getElementById('yearSelect');
+      const viewMode = document.getElementById('viewMode');
+      
+      // Add year options to view mode
+      viewMode.innerHTML = `
+        <option value="single">Individual Month</option>
+        ${availableYears.map(y => `<option value="year-${y}">Calendar Year ${y}</option>`).join('')}
+        <option value="rolling12">Rolling 12 Months</option>
+      `;
+      
+      // Populate month selector
+      if (allStatements.length === 0) {
+        monthSelect.innerHTML = '<option value="">No statements uploaded</option>';
+        return;
+      }
+      
+      const months = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      monthSelect.innerHTML = allStatements.map((s, i) => 
+        `<option value="${s.id}" ${i === 0 ? 'selected' : ''}>${months[s.month]} ${s.year}</option>`
+      ).join('');
+      
+      // Populate year selector
+      yearSelect.innerHTML = availableYears.map((y, i) => 
+        `<option value="${y}" ${i === 0 ? 'selected' : ''}>${y}</option>`
+      ).join('');
+    }
+
+    // Change view mode
+    function changeViewMode() {
+      const viewMode = document.getElementById('viewMode').value;
+      const monthContainer = document.getElementById('monthSelectorContainer');
+      const yearContainer = document.getElementById('yearSelectorContainer');
+      
+      if (viewMode === 'single') {
+        currentView = 'single';
+        monthContainer.style.display = 'block';
+        yearContainer.style.display = 'none';
+        loadMonthData();
+      } else if (viewMode === 'rolling12') {
+        currentView = 'rolling12';
+        monthContainer.style.display = 'none';
+        yearContainer.style.display = 'none';
+        loadDashboardData('rolling12');
+      } else if (viewMode.startsWith('year-')) {
+        currentView = 'year';
+        const year = viewMode.split('-')[1];
+        document.getElementById('yearSelect').value = year;
+        monthContainer.style.display = 'none';
+        yearContainer.style.display = 'none';
+        loadDashboardData('year', year);
+      }
     }
 
     // Load dashboard data
-    async function loadDashboardData() {
+    async function loadDashboardData(view = null, year = null) {
       try {
-        const res = await fetch('/api/dashboard');
+        let url = '/api/dashboard';
+        const params = new URLSearchParams();
+        if (view) params.set('view', view);
+        if (year) params.set('year', year);
+        if (params.toString()) url += '?' + params.toString();
+        
+        const res = await fetch(url);
         dashboardData = await res.json();
         
-        populateStatementSelector();
-        updateKPIs();
+        updateDisplay();
         updateCharts();
         updateRecentFiles();
+        updateExpenseDetails();
       } catch (err) {
         console.error('Failed to load dashboard:', err);
       }
     }
 
-    // Populate statement selector
-    function populateStatementSelector() {
-      const select = document.getElementById('statementSelect');
-      const statements = dashboardData.statements || [];
+    // Load single month data
+    async function loadMonthData() {
+      const statementId = document.getElementById('monthSelect').value;
+      if (!statementId) return;
       
-      if (statements.length === 0) {
-        select.innerHTML = '<option value="">No statements uploaded</option>';
-        document.getElementById('statementCount').textContent = '';
-        return;
+      try {
+        const res = await fetch(`/api/statement/${statementId}`);
+        const data = await res.json();
+        
+        dashboardData = {
+          statements: [data.statement],
+          expenses: data.expenses,
+          expensesByCategory: data.expensesByCategory,
+          totals: {
+            totalBalance: parseFloat(data.statement.closing_balance) || 0,
+            totalExpenses: parseFloat(data.statement.total_expenses) || 0,
+            totalOwnerNights: parseInt(data.statement.owner_nights) || 0,
+            totalGuestNights: parseInt(data.statement.guest_nights) || 0,
+            totalRentalNights: parseInt(data.statement.rental_nights) || 0,
+            totalVacantNights: parseInt(data.statement.vacant_nights) || 0,
+            totalRevenue: parseFloat(data.statement.owner_revenue_share) || 0
+          }
+        };
+        
+        const months = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        document.getElementById('viewInfo').textContent = `${months[data.statement.month]} ${data.statement.year}`;
+        
+        updateDisplay();
+        updateCharts();
+        updateExpenseDetails();
+      } catch (err) {
+        console.error('Failed to load month data:', err);
       }
-      
-      const months = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-      
-      select.innerHTML = statements.map((s, i) => 
-        `<option value="${s.id}" ${i === 0 ? 'selected' : ''}>${months[s.month]} ${s.year}</option>`
-      ).join('');
-      
-      document.getElementById('statementCount').textContent = `${statements.length} statement${statements.length !== 1 ? 's' : ''} on file`;
     }
 
-    // Update KPIs
-    function updateKPIs() {
+    // Update display
+    function updateDisplay() {
+      const totals = dashboardData.totals || {};
       const statements = dashboardData.statements || [];
-      if (statements.length === 0) return;
       
-      const latest = statements[0];
-      
-      const balance = parseFloat(latest.closing_balance) || 0;
+      // KPIs
+      const balance = totals.totalBalance || 0;
       document.getElementById('kpiBalance').textContent = formatCurrency(balance);
       document.getElementById('kpiBalance').className = 'kpi-value' + (balance < 0 ? ' negative' : '');
       
-      // Calculate total expenses from expense categories
-      const expenses = dashboardData.latestExpenses || [];
-      const totalExpenses = expenses.reduce((sum, e) => sum + parseFloat(e.total || 0), 0);
-      document.getElementById('kpiExpenses').textContent = formatCurrency(totalExpenses);
+      document.getElementById('kpiExpenses').textContent = formatCurrency(totals.totalExpenses || 0);
+      document.getElementById('kpiOwnerNights').textContent = totals.totalOwnerNights || 0;
+      document.getElementById('kpiGuestNights').textContent = totals.totalGuestNights || 0;
+      document.getElementById('kpiRentalNights').textContent = totals.totalRentalNights || 0;
+      document.getElementById('kpiVacantNights').textContent = totals.totalVacantNights || 0;
+      document.getElementById('kpiRevenue').textContent = formatCurrency(totals.totalRevenue || 0);
       
-      document.getElementById('kpiOwnerNights').textContent = latest.owner_nights || 0;
-      document.getElementById('kpiRevenue').textContent = formatCurrency(latest.owner_revenue_share || 0);
+      const totalNights = (totals.totalOwnerNights || 0) + (totals.totalGuestNights || 0) + 
+                          (totals.totalRentalNights || 0) + (totals.totalVacantNights || 0);
+      document.getElementById('kpiTotalNights').textContent = totalNights;
       
       // Occupancy tab
-      document.getElementById('occOwner').textContent = latest.owner_nights || 0;
-      document.getElementById('occGuest').textContent = latest.guest_nights || 0;
-      document.getElementById('occRental').textContent = latest.rental_nights || 0;
-      document.getElementById('occVacant').textContent = latest.vacant_nights || 0;
+      document.getElementById('occOwner').textContent = totals.totalOwnerNights || 0;
+      document.getElementById('occGuest').textContent = totals.totalGuestNights || 0;
+      document.getElementById('occRental').textContent = totals.totalRentalNights || 0;
+      document.getElementById('occVacant').textContent = totals.totalVacantNights || 0;
+      
+      if (totalNights > 0) {
+        document.getElementById('occOwnerPct').textContent = ((totals.totalOwnerNights / totalNights) * 100).toFixed(1) + '%';
+        document.getElementById('occGuestPct').textContent = ((totals.totalGuestNights / totalNights) * 100).toFixed(1) + '%';
+        document.getElementById('occRentalPct').textContent = ((totals.totalRentalNights / totalNights) * 100).toFixed(1) + '%';
+        document.getElementById('occVacantPct').textContent = ((totals.totalVacantNights / totalNights) * 100).toFixed(1) + '%';
+      }
+      
+      // View info
+      if (currentView === 'rolling12') {
+        document.getElementById('viewInfo').textContent = `Rolling 12 Months (${statements.length} statements)`;
+      } else if (currentView === 'year') {
+        const year = document.getElementById('viewMode').value.split('-')[1];
+        document.getElementById('viewInfo').textContent = `Calendar Year ${year} (${statements.length} statements)`;
+      }
+      
+      // Expense summary
+      updateExpenseSummary();
+      
+      // Occupancy table for multi-month views
+      if (currentView !== 'single' && statements.length > 1) {
+        updateOccupancyTable(statements);
+      } else {
+        document.getElementById('occupancyTable').innerHTML = '';
+      }
+    }
+
+    // Update expense summary
+    function updateExpenseSummary() {
+      const categories = dashboardData.expensesByCategory || [];
+      const container = document.getElementById('expenseSummary');
+      
+      if (categories.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-light);">No expense data available</p>';
+        document.getElementById('expenseTotalAmount').textContent = '$0.00';
+        return;
+      }
+      
+      let html = '';
+      let grandTotal = 0;
+      
+      for (const cat of categories) {
+        grandTotal += cat.total || 0;
+        html += `
+          <div class="expense-category">
+            <div class="expense-category-header">
+              <span class="expense-category-name">${cat.category}</span>
+              <span class="expense-category-total">${formatCurrency(cat.total)}</span>
+            </div>
+            <div class="expense-items">
+              ${(cat.items || []).map(item => `
+                <div class="expense-item">
+                  <span>${item.subcategory || item.category}</span>
+                  <span>${formatCurrency(item.amount)}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+      
+      container.innerHTML = html;
+      document.getElementById('expenseTotalAmount').textContent = formatCurrency(grandTotal);
+    }
+
+    // Update expense details (multi-month table)
+    function updateExpenseDetails() {
+      const container = document.getElementById('expenseDetailsContainer');
+      const statements = dashboardData.statements || [];
+      const expenses = dashboardData.expenses || [];
+      
+      if (statements.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-light);">No data available</p>';
+        return;
+      }
+      
+      const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      
+      // For single month, show simple breakdown
+      if (currentView === 'single' || statements.length === 1) {
+        const categories = dashboardData.expensesByCategory || [];
+        let html = '<div class="expense-section"><h3>Expense Breakdown</h3>';
+        
+        for (const cat of categories) {
+          html += `
+            <div class="expense-category">
+              <div class="expense-category-header">
+                <span class="expense-category-name">${cat.category}</span>
+                <span class="expense-category-total">${formatCurrency(cat.total)}</span>
+              </div>
+              <div class="expense-items">
+                ${(cat.items || []).map(item => `
+                  <div class="expense-item">
+                    <span>${item.subcategory}</span>
+                    <span>${formatCurrency(item.amount)}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `;
+        }
+        html += '</div>';
+        container.innerHTML = html;
+        return;
+      }
+      
+      // For multi-month view, show table with months as columns
+      const sortedStatements = [...statements].sort((a, b) => {
+        if (a.year !== b.year) return a.year - b.year;
+        return a.month - b.month;
+      });
+      
+      // Group expenses by category and subcategory
+      const expenseMap = {};
+      for (const e of expenses) {
+        const key = `${e.category}|${e.subcategory}`;
+        if (!expenseMap[key]) {
+          expenseMap[key] = { category: e.category, subcategory: e.subcategory, months: {} };
+        }
+        const monthKey = `${e.year}-${e.month}`;
+        expenseMap[key].months[monthKey] = parseFloat(e.amount) || 0;
+      }
+      
+      // Group by category
+      const categories = {};
+      for (const [key, data] of Object.entries(expenseMap)) {
+        if (!categories[data.category]) {
+          categories[data.category] = { name: data.category, items: [], total: {} };
+        }
+        categories[data.category].items.push(data);
+        
+        // Add to category totals
+        for (const [monthKey, amount] of Object.entries(data.months)) {
+          categories[data.category].total[monthKey] = (categories[data.category].total[monthKey] || 0) + amount;
+        }
+      }
+      
+      // Build table
+      let html = `
+        <div class="month-table-container">
+          <table class="month-table">
+            <thead>
+              <tr>
+                <th>Category / Item</th>
+                ${sortedStatements.map(s => `<th>${months[s.month]} ${s.year}</th>`).join('')}
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+      
+      let grandTotals = {};
+      
+      for (const [catName, catData] of Object.entries(categories)) {
+        // Category row
+        let catTotal = 0;
+        html += `<tr class="category-row"><td>${catName}</td>`;
+        for (const s of sortedStatements) {
+          const monthKey = `${s.year}-${s.month}`;
+          const amount = catData.total[monthKey] || 0;
+          catTotal += amount;
+          grandTotals[monthKey] = (grandTotals[monthKey] || 0) + amount;
+          html += `<td>${formatCurrency(amount)}</td>`;
+        }
+        html += `<td><strong>${formatCurrency(catTotal)}</strong></td></tr>`;
+        
+        // Item rows
+        for (const item of catData.items) {
+          let itemTotal = 0;
+          html += `<tr><td style="padding-left: 2rem;">${item.subcategory}</td>`;
+          for (const s of sortedStatements) {
+            const monthKey = `${s.year}-${s.month}`;
+            const amount = item.months[monthKey] || 0;
+            itemTotal += amount;
+            html += `<td>${amount > 0 ? formatCurrency(amount) : '-'}</td>`;
+          }
+          html += `<td>${formatCurrency(itemTotal)}</td></tr>`;
+        }
+      }
+      
+      // Grand total row
+      let overallTotal = 0;
+      html += `<tr class="total-row"><td><strong>TOTAL</strong></td>`;
+      for (const s of sortedStatements) {
+        const monthKey = `${s.year}-${s.month}`;
+        const amount = grandTotals[monthKey] || 0;
+        overallTotal += amount;
+        html += `<td><strong>${formatCurrency(amount)}</strong></td>`;
+      }
+      html += `<td><strong>${formatCurrency(overallTotal)}</strong></td></tr>`;
+      
+      html += '</tbody></table></div>';
+      container.innerHTML = html;
+    }
+
+    // Update occupancy table
+    function updateOccupancyTable(statements) {
+      const container = document.getElementById('occupancyTable');
+      const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      
+      const sorted = [...statements].sort((a, b) => {
+        if (a.year !== b.year) return a.year - b.year;
+        return a.month - b.month;
+      });
+      
+      let totals = { owner: 0, guest: 0, rental: 0, vacant: 0 };
+      
+      let html = `
+        <table class="month-table">
+          <thead>
+            <tr>
+              <th>Type</th>
+              ${sorted.map(s => `<th>${months[s.month]} ${s.year}</th>`).join('')}
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Owner Nights</td>
+              ${sorted.map(s => {
+                totals.owner += parseInt(s.owner_nights) || 0;
+                return `<td>${s.owner_nights || 0}</td>`;
+              }).join('')}
+              <td><strong>${totals.owner}</strong></td>
+            </tr>
+            <tr>
+              <td>Guest Nights</td>
+              ${sorted.map(s => {
+                totals.guest += parseInt(s.guest_nights) || 0;
+                return `<td>${s.guest_nights || 0}</td>`;
+              }).join('')}
+              <td><strong>${totals.guest}</strong></td>
+            </tr>
+            <tr>
+              <td>Rental Nights</td>
+              ${sorted.map(s => {
+                totals.rental += parseInt(s.rental_nights) || 0;
+                return `<td>${s.rental_nights || 0}</td>`;
+              }).join('')}
+              <td><strong>${totals.rental}</strong></td>
+            </tr>
+            <tr>
+              <td>Vacant Nights</td>
+              ${sorted.map(s => {
+                totals.vacant += parseInt(s.vacant_nights) || 0;
+                return `<td>${s.vacant_nights || 0}</td>`;
+              }).join('')}
+              <td><strong>${totals.vacant}</strong></td>
+            </tr>
+            <tr class="total-row">
+              <td><strong>Total</strong></td>
+              ${sorted.map(s => {
+                const total = (parseInt(s.owner_nights) || 0) + (parseInt(s.guest_nights) || 0) + 
+                             (parseInt(s.rental_nights) || 0) + (parseInt(s.vacant_nights) || 0);
+                return `<td><strong>${total}</strong></td>`;
+              }).join('')}
+              <td><strong>${totals.owner + totals.guest + totals.rental + totals.vacant}</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      `;
+      
+      container.innerHTML = html;
     }
 
     // Update charts
     function updateCharts() {
-      // Destroy existing charts
       Object.values(charts).forEach(chart => chart.destroy());
       charts = {};
       
       const statements = dashboardData.statements || [];
-      const expenses = dashboardData.latestExpenses || [];
+      const totals = dashboardData.totals || {};
+      const categories = dashboardData.expensesByCategory || [];
+      
+      if (statements.length === 0) return;
+      
+      const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const sorted = [...statements].sort((a, b) => {
+        if (a.year !== b.year) return a.year - b.year;
+        return a.month - b.month;
+      });
       
       // Expense trend chart
-      if (statements.length > 0) {
-        const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const trends = dashboardData.expenseTrends || [];
-        
-        charts.expense = new Chart(document.getElementById('expenseChart'), {
-          type: 'line',
-          data: {
-            labels: trends.map(t => `${months[t.month]} ${t.year}`),
-            datasets: [{
-              label: 'Expenses',
-              data: trends.map(t => parseFloat(t.total_expenses) || 0),
-              borderColor: '#c9a962',
-              backgroundColor: 'rgba(201, 169, 98, 0.1)',
-              fill: true,
-              tension: 0.4
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: {
-              y: { beginAtZero: true, ticks: { callback: v => '$' + v.toLocaleString() } }
-            }
-          }
-        });
-      }
+      charts.expense = new Chart(document.getElementById('expenseChart'), {
+        type: 'line',
+        data: {
+          labels: sorted.map(s => `${months[s.month]} ${s.year}`),
+          datasets: [{
+            label: 'Expenses',
+            data: sorted.map(s => parseFloat(s.total_expenses) || 0),
+            borderColor: '#c9a962',
+            backgroundColor: 'rgba(201, 169, 98, 0.1)',
+            fill: true,
+            tension: 0.4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + v.toLocaleString() } } }
+        }
+      });
       
       // Occupancy pie chart
-      const latest = statements[0];
-      if (latest) {
-        charts.occupancy = new Chart(document.getElementById('occupancyChart'), {
-          type: 'doughnut',
-          data: {
-            labels: ['Owner', 'Guest', 'Rental', 'Vacant'],
-            datasets: [{
-              data: [
-                latest.owner_nights || 0,
-                latest.guest_nights || 0,
-                latest.rental_nights || 0,
-                latest.vacant_nights || 0
-              ],
-              backgroundColor: ['#2d5a6e', '#c9a962', '#4a9e6e', '#e0ddd5']
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { position: 'bottom' } }
-          }
-        });
-      }
+      charts.occupancy = new Chart(document.getElementById('occupancyChart'), {
+        type: 'doughnut',
+        data: {
+          labels: ['Owner', 'Guest', 'Rental', 'Vacant'],
+          datasets: [{
+            data: [
+              totals.totalOwnerNights || 0,
+              totals.totalGuestNights || 0,
+              totals.totalRentalNights || 0,
+              totals.totalVacantNights || 0
+            ],
+            backgroundColor: ['#2d5a6e', '#c9a962', '#4a9e6e', '#ccc']
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { position: 'bottom' } }
+        }
+      });
       
       // Expense pie chart
-      if (expenses.length > 0) {
+      if (categories.length > 0) {
         const colors = ['#1a3a4a', '#2d5a6e', '#c9a962', '#4a9e6e', '#7a6e5e', '#a08060', '#5a8a9e', '#8ab06e'];
         charts.expensePie = new Chart(document.getElementById('expensePieChart'), {
           type: 'pie',
           data: {
-            labels: expenses.map(e => e.category),
+            labels: categories.map(c => c.category),
             datasets: [{
-              data: expenses.map(e => parseFloat(e.total) || 0),
-              backgroundColor: colors.slice(0, expenses.length)
+              data: categories.map(c => c.total || 0),
+              backgroundColor: colors.slice(0, categories.length)
             }]
           },
           options: {
@@ -523,40 +945,52 @@
             plugins: { legend: { position: 'right' } }
           }
         });
-        
-        // Update expense list
-        const listHtml = expenses.map(e => `
-          <div class="expense-item">
-            <span class="expense-name">${e.subcategory || e.category}</span>
-            <span class="expense-amount">${formatCurrency(e.total)}</span>
-          </div>
-        `).join('');
-        document.getElementById('expenseList').innerHTML = listHtml;
-        
-        const total = expenses.reduce((sum, e) => sum + parseFloat(e.total || 0), 0);
-        document.getElementById('expenseTotal').textContent = formatCurrency(total);
       }
       
-      // Occupancy bar chart
-      if (statements.length > 0) {
-        const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const recentStatements = statements.slice(0, 6).reverse();
+      // Occupancy stacked bar chart
+      charts.occupancyBar = new Chart(document.getElementById('occupancyBarChart'), {
+        type: 'bar',
+        data: {
+          labels: sorted.map(s => `${months[s.month]} ${s.year}`),
+          datasets: [
+            { label: 'Owner', data: sorted.map(s => s.owner_nights || 0), backgroundColor: '#2d5a6e' },
+            { label: 'Guest', data: sorted.map(s => s.guest_nights || 0), backgroundColor: '#c9a962' },
+            { label: 'Rental', data: sorted.map(s => s.rental_nights || 0), backgroundColor: '#4a9e6e' },
+            { label: 'Vacant', data: sorted.map(s => s.vacant_nights || 0), backgroundColor: '#ccc' }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: { x: { stacked: true }, y: { stacked: true } },
+          plugins: { legend: { position: 'bottom' } }
+        }
+      });
+      
+      // Expense stacked chart (if multi-month)
+      if (sorted.length > 1 && categories.length > 0) {
+        const colors = ['#1a3a4a', '#2d5a6e', '#c9a962', '#4a9e6e', '#7a6e5e', '#a08060'];
+        const datasets = categories.slice(0, 6).map((cat, i) => ({
+          label: cat.category,
+          data: sorted.map(s => {
+            const monthExpenses = (cat.items || []).filter(item => 
+              item.year === s.year && item.month === s.month
+            );
+            return monthExpenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+          }),
+          backgroundColor: colors[i]
+        }));
         
-        charts.occupancyBar = new Chart(document.getElementById('occupancyBarChart'), {
+        charts.expenseStacked = new Chart(document.getElementById('expenseStackedChart'), {
           type: 'bar',
           data: {
-            labels: recentStatements.map(s => `${months[s.month]} ${s.year}`),
-            datasets: [
-              { label: 'Owner', data: recentStatements.map(s => s.owner_nights || 0), backgroundColor: '#2d5a6e' },
-              { label: 'Guest', data: recentStatements.map(s => s.guest_nights || 0), backgroundColor: '#c9a962' },
-              { label: 'Rental', data: recentStatements.map(s => s.rental_nights || 0), backgroundColor: '#4a9e6e' },
-              { label: 'Vacant', data: recentStatements.map(s => s.vacant_nights || 0), backgroundColor: '#e0ddd5' }
-            ]
+            labels: sorted.map(s => `${months[s.month]} ${s.year}`),
+            datasets: datasets
           },
           options: {
             responsive: true,
             maintainAspectRatio: false,
-            scales: { x: { stacked: true }, y: { stacked: true } },
+            scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => '$' + v.toLocaleString() } } },
             plugins: { legend: { position: 'bottom' } }
           }
         });
@@ -575,49 +1009,10 @@
       
       listEl.innerHTML = files.map(f => `
         <div class="file-item">
-          <span class="file-name">${f.filename}</span>
-          <span class="file-date">${new Date(f.upload_date).toLocaleDateString()}</span>
+          <span>${f.filename}</span>
+          <span style="color: var(--text-light);">${new Date(f.upload_date).toLocaleDateString()}</span>
         </div>
       `).join('');
-    }
-
-    // Load specific statement data
-    async function loadStatementData() {
-      const statementId = document.getElementById('statementSelect').value;
-      if (!statementId) return;
-      
-      try {
-        const res = await fetch(`/api/statement/${statementId}`);
-        const data = await res.json();
-        
-        // Update displays with specific statement data
-        const s = data.statement;
-        document.getElementById('kpiBalance').textContent = formatCurrency(s.closing_balance);
-        document.getElementById('kpiOwnerNights').textContent = s.owner_nights || 0;
-        document.getElementById('kpiRevenue').textContent = formatCurrency(s.owner_revenue_share || 0);
-        
-        document.getElementById('occOwner').textContent = s.owner_nights || 0;
-        document.getElementById('occGuest').textContent = s.guest_nights || 0;
-        document.getElementById('occRental').textContent = s.rental_nights || 0;
-        document.getElementById('occVacant').textContent = s.vacant_nights || 0;
-        
-        // Update expense list
-        if (data.expensesByCategory && data.expensesByCategory.length > 0) {
-          const listHtml = data.expensesByCategory.map(e => `
-            <div class="expense-item">
-              <span class="expense-name">${e.category}</span>
-              <span class="expense-amount">${formatCurrency(e.total)}</span>
-            </div>
-          `).join('');
-          document.getElementById('expenseList').innerHTML = listHtml;
-          
-          const total = data.expensesByCategory.reduce((sum, e) => sum + parseFloat(e.total || 0), 0);
-          document.getElementById('expenseTotal').textContent = formatCurrency(total);
-          document.getElementById('kpiExpenses').textContent = formatCurrency(total);
-        }
-      } catch (err) {
-        console.error('Failed to load statement:', err);
-      }
     }
 
     // Format currency
@@ -654,7 +1049,7 @@
     });
 
     async function handleFileUpload(file) {
-      if (!file.name.endsWith('.pdf')) {
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
         uploadStatus.className = 'upload-status error';
         uploadStatus.textContent = 'Please upload a PDF file';
         return;
@@ -677,7 +1072,7 @@
         if (data.success) {
           uploadStatus.className = 'upload-status success';
           uploadStatus.textContent = `Successfully processed ${file.name}`;
-          await loadDashboardData();
+          await loadInitialData();
         } else {
           uploadStatus.className = 'upload-status error';
           uploadStatus.textContent = data.error || 'Upload failed';
