@@ -8,21 +8,9 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    :root { 
-      --primary: #1a3a4a; 
-      --primary-light: #2d5a6e; 
-      --accent: #c9a962; 
-      --text: #1a1a1a; 
-      --text-light: #666; 
-      --card-bg: rgba(255,255,255,0.92); 
-      --shadow: 0 8px 32px rgba(0,0,0,0.1);
-      --owner-color: #2d5a6e;
-      --guest-color: #c9a962;
-      --rental-color: #4a9e6e;
-      --vacant-color: #bbb;
-    }
+    :root { --primary: #1a3a4a; --primary-light: #2d5a6e; --accent: #c9a962; --text: #1a1a1a; --text-light: #666; --card-bg: rgba(255,255,255,0.94); --shadow: 0 8px 32px rgba(0,0,0,0.1); --owner: #2d5a6e; --guest: #c9a962; --rental: #4a9e6e; --vacant: #bbb; --success: #2e7d32; --danger: #c62828; }
     body { font-family: 'Montserrat', sans-serif; background: linear-gradient(135deg, #e8e4dc 0%, #d4cfc4 50%, #c9c4b8 100%); min-height: 100vh; color: var(--text); }
-    h1,h2,h3 { font-family: 'Cormorant Garamond', serif; font-weight: 400; }
+    h1,h2,h3,h4 { font-family: 'Cormorant Garamond', serif; font-weight: 400; }
     
     .login-container { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem; }
     .login-card { background: var(--card-bg); border-radius: 24px; padding: 3rem; width: 100%; max-width: 420px; box-shadow: var(--shadow); }
@@ -30,310 +18,255 @@
     .login-logo h1 { font-size: 2.5rem; color: var(--primary); }
     .login-logo span { font-size: 0.85rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.3em; }
     .form-group { margin-bottom: 1.5rem; }
-    .form-group label { display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-light); margin-bottom: 0.5rem; }
-    .form-group input, .form-group select { width: 100%; padding: 1rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 12px; font-family: inherit; font-size: 1rem; background: white; }
-    .btn { padding: 1rem 2rem; border: none; border-radius: 12px; font-family: inherit; font-size: 0.9rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.15em; cursor: pointer; }
-    .btn-primary { background: var(--primary); color: white; width: 100%; }
+    .form-group label { display: block; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-light); margin-bottom: 0.5rem; }
+    .form-group input, .form-group select { width: 100%; padding: 0.85rem 1rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 10px; font-family: inherit; font-size: 0.95rem; background: white; }
+    .btn { padding: 0.85rem 1.5rem; border: none; border-radius: 10px; font-family: inherit; font-size: 0.85rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; cursor: pointer; transition: all 0.2s; }
+    .btn-primary { background: var(--primary); color: white; }
     .btn-primary:hover { background: var(--primary-light); }
+    .btn-sm { padding: 0.5rem 1rem; font-size: 0.75rem; }
+    .btn-outline { background: white; border: 1px solid rgba(0,0,0,0.15); color: var(--text); }
+    .btn-outline:hover { background: var(--primary); color: white; border-color: var(--primary); }
     .error-message { background: #fee; color: #c00; padding: 0.75rem; border-radius: 8px; margin-bottom: 1rem; display: none; }
     
     .dashboard { display: none; min-height: 100vh; }
     .dashboard.active { display: block; }
     .login-container.hidden { display: none; }
     
-    .header { background: var(--card-bg); padding: 1rem 2rem; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; box-shadow: var(--shadow); }
+    .header { background: var(--card-bg); padding: 0.85rem 2rem; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; box-shadow: var(--shadow); }
     .header-brand { display: flex; align-items: center; gap: 1rem; }
-    .header-brand h1 { font-size: 1.5rem; color: var(--primary); }
-    .header-brand span { font-size: 0.7rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.2em; background: rgba(201,169,98,0.15); padding: 0.35rem 0.75rem; border-radius: 4px; }
-    .header-btn { padding: 0.5rem 1rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; background: transparent; font-family: inherit; font-size: 0.8rem; cursor: pointer; }
+    .header-brand h1 { font-size: 1.4rem; color: var(--primary); }
+    .header-brand span { font-size: 0.65rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.2em; background: rgba(201,169,98,0.15); padding: 0.3rem 0.6rem; border-radius: 4px; }
+    .header-btn { padding: 0.4rem 0.8rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 6px; background: transparent; font-family: inherit; font-size: 0.75rem; cursor: pointer; }
     .header-btn:hover { background: var(--primary); color: white; }
     
-    .main-content { padding: 2rem; max-width: 1800px; margin: 0 auto; }
+    .main-content { padding: 1.5rem 2rem; max-width: 1900px; margin: 0 auto; }
     
-    .view-selector { background: var(--card-bg); border-radius: 16px; padding: 1.25rem; margin-bottom: 1.5rem; display: flex; align-items: flex-start; gap: 1.5rem; box-shadow: var(--shadow); flex-wrap: wrap; }
-    .view-group { display: flex; flex-direction: column; gap: 0.5rem; }
-    .view-group label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-light); }
-    .view-group select { padding: 0.6rem 1rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; font-family: inherit; background: white; min-width: 180px; }
-    .view-group select[multiple] { height: 120px; }
-    .view-info { font-size: 0.85rem; color: var(--text-light); margin-left: auto; align-self: center; }
+    .view-selector { background: var(--card-bg); border-radius: 14px; padding: 1rem 1.25rem; margin-bottom: 1.25rem; box-shadow: var(--shadow); }
+    .view-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
+    .view-header label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-light); }
+    .view-header select { padding: 0.5rem 0.75rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 6px; font-family: inherit; font-size: 0.85rem; background: white; }
+    .view-info { margin-left: auto; font-size: 0.8rem; color: var(--text-light); }
     
-    .tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; background: var(--card-bg); border-radius: 12px; padding: 0.5rem; box-shadow: var(--shadow); flex-wrap: wrap; }
-    .tab-btn { padding: 0.75rem 1.25rem; border: none; border-radius: 8px; font-family: inherit; font-size: 0.8rem; font-weight: 500; color: var(--text-light); background: transparent; cursor: pointer; }
+    .month-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; padding-top: 0.75rem; border-top: 1px solid rgba(0,0,0,0.05); }
+    .month-chip { display: flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.7rem; background: white; border: 1px solid rgba(0,0,0,0.12); border-radius: 20px; cursor: pointer; font-size: 0.75rem; transition: all 0.15s; user-select: none; }
+    .month-chip:hover { border-color: var(--accent); }
+    .month-chip.selected { background: var(--primary); color: white; border-color: var(--primary); }
+    .month-chip .check { width: 14px; height: 14px; border: 2px solid rgba(0,0,0,0.25); border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 10px; }
+    .month-chip.selected .check { background: white; border-color: white; color: var(--primary); }
+    
+    .tabs { display: flex; gap: 0.35rem; margin-bottom: 1.25rem; background: var(--card-bg); border-radius: 10px; padding: 0.4rem; box-shadow: var(--shadow); flex-wrap: wrap; }
+    .tab-btn { padding: 0.6rem 1rem; border: none; border-radius: 6px; font-family: inherit; font-size: 0.75rem; font-weight: 500; color: var(--text-light); background: transparent; cursor: pointer; transition: all 0.2s; }
     .tab-btn:hover { color: var(--primary); }
     .tab-btn.active { background: var(--primary); color: white; }
     .tab-content { display: none; }
     .tab-content.active { display: block; }
     
-    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
-    .kpi-card { background: var(--card-bg); border-radius: 16px; padding: 1.25rem; box-shadow: var(--shadow); }
-    .kpi-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-light); margin-bottom: 0.4rem; }
-    .kpi-value { font-family: 'Cormorant Garamond', serif; font-size: 1.6rem; font-weight: 500; color: var(--primary); }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.25rem; }
+    .card { background: var(--card-bg); border-radius: 14px; padding: 1.25rem; box-shadow: var(--shadow); margin-bottom: 1.25rem; }
+    .card h3 { font-size: 1rem; color: var(--primary); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(0,0,0,0.05); }
+    
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .kpi { background: var(--card-bg); border-radius: 12px; padding: 1rem; box-shadow: var(--shadow); }
+    .kpi-label { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-light); margin-bottom: 0.3rem; }
+    .kpi-value { font-family: 'Cormorant Garamond', serif; font-size: 1.4rem; font-weight: 500; color: var(--primary); }
     .kpi-value.accent { color: var(--accent); }
-    .kpi-value.owner { color: var(--owner-color); }
-    .kpi-value.guest { color: var(--guest-color); }
-    .kpi-value.rental { color: var(--rental-color); }
-    .kpi-value.vacant { color: var(--vacant-color); }
-    .kpi-sub { font-size: 0.7rem; color: var(--text-light); margin-top: 0.25rem; }
+    .kpi-value.success { color: var(--success); }
+    .kpi-value.danger { color: var(--danger); }
+    .kpi-sub { font-size: 0.6rem; color: var(--text-light); margin-top: 0.2rem; }
     
-    .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
-    .chart-card { background: var(--card-bg); border-radius: 16px; padding: 1.25rem; box-shadow: var(--shadow); }
-    .chart-card h3 { font-size: 1rem; color: var(--primary); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(0,0,0,0.05); }
-    .chart-container { position: relative; height: 260px; }
+    .chart-container { position: relative; height: 240px; }
     
-    .occupancy-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
-    .occ-card { background: var(--card-bg); border-radius: 12px; padding: 1.25rem; box-shadow: var(--shadow); text-align: center; border-left: 4px solid; }
-    .occ-card.owner { border-color: var(--owner-color); }
-    .occ-card.guest { border-color: var(--guest-color); }
-    .occ-card.rental { border-color: var(--rental-color); }
-    .occ-card.vacant { border-color: var(--vacant-color); }
-    .occ-value { font-family: 'Cormorant Garamond', serif; font-size: 2.25rem; font-weight: 600; }
-    .occ-card.owner .occ-value { color: var(--owner-color); }
-    .occ-card.guest .occ-value { color: var(--guest-color); }
-    .occ-card.rental .occ-value { color: var(--rental-color); }
-    .occ-card.vacant .occ-value { color: var(--vacant-color); }
-    .occ-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-light); margin-top: 0.4rem; }
-    .occ-pct { font-size: 0.85rem; color: var(--text-light); margin-top: 0.2rem; font-weight: 500; }
+    .occ-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+    .occ-card { background: var(--card-bg); border-radius: 10px; padding: 1rem; box-shadow: var(--shadow); text-align: center; border-left: 4px solid; }
+    .occ-card.owner { border-color: var(--owner); }
+    .occ-card.guest { border-color: var(--guest); }
+    .occ-card.rental { border-color: var(--rental); }
+    .occ-card.vacant { border-color: var(--vacant); }
+    .occ-value { font-family: 'Cormorant Garamond', serif; font-size: 2rem; font-weight: 600; }
+    .occ-card.owner .occ-value { color: var(--owner); }
+    .occ-card.guest .occ-value { color: var(--guest); }
+    .occ-card.rental .occ-value { color: var(--rental); }
+    .occ-card.vacant .occ-value { color: var(--vacant); }
+    .occ-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-light); margin-top: 0.3rem; }
+    .occ-pct { font-size: 0.8rem; color: var(--text-light); font-weight: 500; }
     
-    .section-card { background: var(--card-bg); border-radius: 16px; padding: 1.5rem; box-shadow: var(--shadow); margin-bottom: 1.5rem; }
-    .section-card h3 { font-size: 1.1rem; color: var(--primary); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(0,0,0,0.05); }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    .data-table th { text-align: left; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-light); padding: 0.6rem 0.5rem; border-bottom: 2px solid rgba(0,0,0,0.1); font-weight: 600; }
+    .data-table th.r { text-align: right; }
+    .data-table td { padding: 0.5rem; border-bottom: 1px solid rgba(0,0,0,0.04); }
+    .data-table td.r { text-align: right; font-variant-numeric: tabular-nums; }
+    .data-table tr.cat { background: rgba(0,0,0,0.02); }
+    .data-table tr.cat td { font-weight: 600; padding: 0.6rem 0.5rem; }
+    .data-table tr.cat td:first-child { color: var(--primary); }
+    .data-table tr.item td:first-child { padding-left: 1.25rem; color: var(--text-light); }
+    .data-table tr.total { background: var(--primary); color: white; }
+    .data-table tr.total td { padding: 0.7rem 0.5rem; font-weight: 600; }
+    .data-table tr.highlight { background: rgba(201,169,98,0.15); }
     
-    .expense-table { width: 100%; border-collapse: collapse; }
-    .expense-table th { text-align: left; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-light); padding: 0.75rem 0.5rem; border-bottom: 2px solid rgba(0,0,0,0.1); }
-    .expense-table th.num { text-align: right; }
-    .expense-table td { padding: 0.6rem 0.5rem; border-bottom: 1px solid rgba(0,0,0,0.05); font-size: 0.85rem; }
-    .expense-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
-    .expense-table tr.category-row { background: rgba(0,0,0,0.02); }
-    .expense-table tr.category-row td { font-weight: 600; padding: 0.75rem 0.5rem; }
-    .expense-table tr.category-row td:first-child { color: var(--primary); }
-    .expense-table tr.item-row td:first-child { padding-left: 1.5rem; color: var(--text-light); }
-    .expense-table tr.total-row { background: var(--primary); color: white; }
-    .expense-table tr.total-row td { padding: 0.85rem 0.5rem; font-weight: 600; }
+    .pct-bar { display: inline-block; height: 6px; background: var(--accent); border-radius: 3px; vertical-align: middle; }
+    .pct-bar.cumulative { background: var(--primary); }
     
-    .pct-bar { display: inline-block; height: 8px; background: var(--accent); border-radius: 4px; margin-right: 0.5rem; vertical-align: middle; }
-    .pct-text { font-size: 0.75rem; color: var(--text-light); }
+    .insight-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .insight { background: var(--card-bg); border-radius: 10px; padding: 1rem; box-shadow: var(--shadow); }
+    .insight-title { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-light); margin-bottom: 0.3rem; }
+    .insight-value { font-family: 'Cormorant Garamond', serif; font-size: 1.15rem; color: var(--primary); }
+    .insight-detail { font-size: 0.7rem; color: var(--text-light); margin-top: 0.2rem; }
     
-    .heatmap-container { overflow-x: auto; }
-    .heatmap { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-    .heatmap th, .heatmap td { padding: 0.5rem; text-align: center; border: 1px solid rgba(0,0,0,0.05); }
-    .heatmap th { background: var(--primary); color: white; font-size: 0.7rem; font-weight: 500; }
-    .heatmap th:first-child { text-align: left; }
-    .heatmap td:first-child { text-align: left; font-weight: 500; background: rgba(0,0,0,0.02); }
-    .heatmap .heat-0 { background: #f5f5f5; }
-    .heatmap .heat-1 { background: #fff3cd; }
-    .heatmap .heat-2 { background: #ffe69c; }
-    .heatmap .heat-3 { background: #ffda6a; }
-    .heatmap .heat-4 { background: #ffcd39; }
-    .heatmap .heat-5 { background: #ffc107; color: #000; }
+    .heatmap { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+    .heatmap th, .heatmap td { padding: 0.4rem 0.5rem; text-align: center; border: 1px solid rgba(0,0,0,0.04); }
+    .heatmap th { background: var(--primary); color: white; font-size: 0.65rem; font-weight: 500; }
+    .heatmap th:first-child, .heatmap td:first-child { text-align: left; min-width: 120px; }
+    .heatmap td:first-child { font-weight: 500; background: rgba(0,0,0,0.02); }
+    .heat-0 { background: #f8f8f8; } .heat-1 { background: #fff8e1; } .heat-2 { background: #ffecb3; } .heat-3 { background: #ffe082; } .heat-4 { background: #ffd54f; } .heat-5 { background: #ffca28; }
     
-    .month-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-    .month-table th, .month-table td { padding: 0.6rem 0.75rem; text-align: right; border-bottom: 1px solid rgba(0,0,0,0.05); }
-    .month-table th { background: var(--primary); color: white; font-size: 0.7rem; font-weight: 500; text-transform: uppercase; }
-    .month-table th:first-child, .month-table td:first-child { text-align: left; }
-    .month-table tr.total-row { background: rgba(0,0,0,0.03); font-weight: 600; }
+    .chat-container { display: flex; flex-direction: column; height: 420px; }
+    .chat-messages { flex: 1; overflow-y: auto; padding: 1rem; background: #f9f9f9; border-radius: 8px; margin-bottom: 1rem; }
+    .chat-message { margin-bottom: 1rem; max-width: 85%; }
+    .chat-message.user { margin-left: auto; }
+    .chat-message .bubble { padding: 0.75rem 1rem; border-radius: 12px; font-size: 0.85rem; line-height: 1.5; }
+    .chat-message.user .bubble { background: var(--primary); color: white; border-bottom-right-radius: 4px; }
+    .chat-message.ai .bubble { background: white; border: 1px solid rgba(0,0,0,0.1); border-bottom-left-radius: 4px; }
+    .chat-message .meta { font-size: 0.6rem; color: var(--text-light); margin-top: 0.2rem; }
+    .chat-message.user .meta { text-align: right; }
+    .chat-input-area { display: flex; gap: 0.75rem; }
+    .chat-input-area input { flex: 1; padding: 0.75rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; font-family: inherit; }
     
-    .upload-section { max-width: 600px; }
-    .upload-zone { border: 2px dashed rgba(0,0,0,0.15); border-radius: 16px; padding: 3rem; text-align: center; cursor: pointer; }
+    .upload-zone { border: 2px dashed rgba(0,0,0,0.15); border-radius: 12px; padding: 2rem; text-align: center; cursor: pointer; }
     .upload-zone:hover { border-color: var(--accent); background: rgba(201,169,98,0.05); }
-    .upload-icon { font-size: 3rem; margin-bottom: 1rem; opacity: 0.5; }
-    .upload-text { color: var(--text-light); }
+    .upload-icon { font-size: 2rem; margin-bottom: 0.5rem; opacity: 0.5; }
+    .upload-text { color: var(--text-light); font-size: 0.85rem; }
     .upload-text strong { color: var(--accent); }
     .file-input { display: none; }
-    .upload-status { margin-top: 1rem; padding: 1rem; border-radius: 8px; display: none; }
-    .upload-status.success { display: block; background: #e8f5e9; color: #2e7d32; }
-    .upload-status.error { display: block; background: #ffebee; color: #c62828; }
+    .upload-status { margin-top: 1rem; padding: 0.75rem; border-radius: 6px; display: none; font-size: 0.8rem; }
+    .upload-status.success { display: block; background: #e8f5e9; color: var(--success); }
+    .upload-status.error { display: block; background: #ffebee; color: var(--danger); }
     .upload-status.loading { display: block; background: #e3f2fd; color: #1565c0; }
+    .file-list { max-height: 150px; overflow-y: auto; margin-top: 1rem; }
+    .file-item { display: flex; justify-content: space-between; padding: 0.35rem 0; border-bottom: 1px solid rgba(0,0,0,0.04); font-size: 0.75rem; }
     
-    .file-list { max-height: 200px; overflow-y: auto; margin-top: 1rem; }
-    .file-item { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid rgba(0,0,0,0.05); font-size: 0.85rem; }
-    
-    @media (max-width: 1000px) { .occupancy-grid { grid-template-columns: repeat(2, 1fr); } .charts-grid { grid-template-columns: 1fr; } }
-    @media (max-width: 600px) { .occupancy-grid { grid-template-columns: 1fr 1fr; } .kpi-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 1000px) { .grid-2 { grid-template-columns: 1fr; } .occ-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 600px) { .occ-grid { grid-template-columns: 1fr 1fr; } .kpi-grid { grid-template-columns: 1fr 1fr; } }
   </style>
 </head>
 <body>
   <div class="login-container" id="loginContainer">
     <div class="login-card">
-      <div class="login-logo">
-        <h1>Villa 8</h1>
-        <span>Amanyara</span>
-      </div>
+      <div class="login-logo"><h1>Villa 8</h1><span>Amanyara</span></div>
       <div class="error-message" id="loginError"></div>
       <form id="loginForm">
-        <div class="form-group">
-          <label>Username</label>
-          <input type="text" id="username" required>
-        </div>
-        <div class="form-group">
-          <label>Password</label>
-          <input type="password" id="password" required>
-        </div>
-        <button type="submit" class="btn btn-primary">Sign In</button>
+        <div class="form-group"><label>Username</label><input type="text" id="username" required></div>
+        <div class="form-group"><label>Password</label><input type="password" id="password" required></div>
+        <button type="submit" class="btn btn-primary" style="width:100%">Sign In</button>
       </form>
     </div>
   </div>
 
   <div class="dashboard" id="dashboard">
     <header class="header">
-      <div class="header-brand">
-        <h1>Villa 8</h1>
-        <span>Amanyara</span>
-      </div>
-      <div>
-        <span id="welcomeUser" style="margin-right:1rem;font-size:0.85rem;"></span>
-        <button class="header-btn" onclick="logout()">Logout</button>
-      </div>
+      <div class="header-brand"><h1>Villa 8</h1><span>Amanyara</span></div>
+      <div><span id="welcomeUser" style="margin-right:1rem;font-size:0.8rem;"></span><button class="header-btn" onclick="logout()">Logout</button></div>
     </header>
 
     <main class="main-content">
       <div class="view-selector">
-        <div class="view-group">
-          <label>View Mode</label>
-          <select id="viewMode" onchange="changeViewMode()">
-            <option value="single">Individual Months</option>
-            <option value="rolling12">Rolling 12 Months</option>
+        <div class="view-header">
+          <label>Quick Select:</label>
+          <select id="quickSelect" onchange="quickSelectChange()">
+            <option value="">-- Choose --</option>
           </select>
+          <button class="btn btn-outline btn-sm" onclick="selectAll()">All</button>
+          <button class="btn btn-outline btn-sm" onclick="selectNone()">None</button>
+          <span class="view-info" id="viewInfo">No months selected</span>
         </div>
-        <div class="view-group" id="monthGroup">
-          <label>Select Month(s) - Ctrl/Cmd+Click for multiple</label>
-          <select id="monthSelect" multiple onchange="loadSelectedMonths()">
-          </select>
-        </div>
-        <div class="view-group" id="yearGroup" style="display:none;">
-          <label>Year</label>
-          <select id="yearSelect" onchange="loadYearData()">
-          </select>
-        </div>
-        <span class="view-info" id="viewInfo"></span>
+        <div class="month-grid" id="monthGrid"></div>
       </div>
 
       <div class="tabs">
         <button class="tab-btn active" data-tab="overview">Overview</button>
         <button class="tab-btn" data-tab="occupancy">Occupancy</button>
         <button class="tab-btn" data-tab="expenses">Expenses</button>
+        <button class="tab-btn" data-tab="pareto">80/20 Analysis</button>
         <button class="tab-btn" data-tab="heatmap">Heat Map</button>
+        <button class="tab-btn" data-tab="ai">AI Assistant</button>
         <button class="tab-btn" data-tab="upload">Upload</button>
       </div>
 
       <div class="tab-content active" id="tab-overview">
         <div class="kpi-grid">
-          <div class="kpi-card">
-            <div class="kpi-label">Current Balance</div>
-            <div class="kpi-value" id="kpiBalance">--</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">Total Expenses</div>
-            <div class="kpi-value accent" id="kpiExpenses">--</div>
-            <div class="kpi-sub" id="kpiExpensesPct"></div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">Owner Nights</div>
-            <div class="kpi-value owner" id="kpiOwnerNights">--</div>
-            <div class="kpi-sub" id="kpiOwnerPct"></div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">Guest Nights</div>
-            <div class="kpi-value guest" id="kpiGuestNights">--</div>
-            <div class="kpi-sub" id="kpiGuestPct"></div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">Rental Nights</div>
-            <div class="kpi-value rental" id="kpiRentalNights">--</div>
-            <div class="kpi-sub" id="kpiRentalPct"></div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">Vacant Nights</div>
-            <div class="kpi-value vacant" id="kpiVacantNights">--</div>
-            <div class="kpi-sub" id="kpiVacantPct"></div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">Owner Revenue (50%)</div>
-            <div class="kpi-value accent" id="kpiRevenue">--</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">Total Nights</div>
-            <div class="kpi-value" id="kpiTotalNights">--</div>
-          </div>
+          <div class="kpi"><div class="kpi-label">Current Balance</div><div class="kpi-value" id="kpiBalance">--</div></div>
+          <div class="kpi"><div class="kpi-label">Total Expenses</div><div class="kpi-value accent" id="kpiExpenses">--</div><div class="kpi-sub" id="kpiExpPct"></div></div>
+          <div class="kpi"><div class="kpi-label">Owner Revenue</div><div class="kpi-value accent" id="kpiRevenue">--</div></div>
+          <div class="kpi"><div class="kpi-label">Net Income</div><div class="kpi-value" id="kpiNet">--</div></div>
+          <div class="kpi"><div class="kpi-label">Total Nights</div><div class="kpi-value" id="kpiNights">--</div><div class="kpi-sub" id="kpiOccRate"></div></div>
+          <div class="kpi"><div class="kpi-label">Cost/Occupied Night</div><div class="kpi-value" id="kpiCostNight">--</div></div>
         </div>
-
-        <div class="charts-grid">
-          <div class="chart-card">
-            <h3>Expense Trend</h3>
-            <div class="chart-container"><canvas id="expenseChart"></canvas></div>
-          </div>
-          <div class="chart-card">
-            <h3>Occupancy Mix</h3>
-            <div class="chart-container"><canvas id="occupancyChart"></canvas></div>
-          </div>
+        <div class="insight-grid">
+          <div class="insight"><div class="insight-title">Highest Expense Month</div><div class="insight-value" id="insHighExp">--</div><div class="insight-detail" id="insHighExpAmt"></div></div>
+          <div class="insight"><div class="insight-title">Lowest Expense Month</div><div class="insight-value" id="insLowExp">--</div><div class="insight-detail" id="insLowExpAmt"></div></div>
+          <div class="insight"><div class="insight-title">Best Revenue Month</div><div class="insight-value" id="insHighRev">--</div><div class="insight-detail" id="insHighRevAmt"></div></div>
+          <div class="insight"><div class="insight-title">Most Rental Activity</div><div class="insight-value" id="insMostRental">--</div><div class="insight-detail" id="insMostRentalAmt"></div></div>
+        </div>
+        <div class="grid-2">
+          <div class="card"><h3>Expense Trend</h3><div class="chart-container"><canvas id="expenseChart"></canvas></div></div>
+          <div class="card"><h3>Occupancy Mix</h3><div class="chart-container"><canvas id="occupancyChart"></canvas></div></div>
         </div>
       </div>
 
       <div class="tab-content" id="tab-occupancy">
-        <div class="occupancy-grid">
-          <div class="occ-card owner">
-            <div class="occ-value" id="occOwner">--</div>
-            <div class="occ-label">Owner Nights</div>
-            <div class="occ-pct" id="occOwnerPct">--</div>
-          </div>
-          <div class="occ-card guest">
-            <div class="occ-value" id="occGuest">--</div>
-            <div class="occ-label">Guest Nights</div>
-            <div class="occ-pct" id="occGuestPct">--</div>
-          </div>
-          <div class="occ-card rental">
-            <div class="occ-value" id="occRental">--</div>
-            <div class="occ-label">Rental Nights</div>
-            <div class="occ-pct" id="occRentalPct">--</div>
-          </div>
-          <div class="occ-card vacant">
-            <div class="occ-value" id="occVacant">--</div>
-            <div class="occ-label">Vacant Nights</div>
-            <div class="occ-pct" id="occVacantPct">--</div>
-          </div>
+        <div class="occ-grid">
+          <div class="occ-card owner"><div class="occ-value" id="occOwner">--</div><div class="occ-label">Owner Nights</div><div class="occ-pct" id="occOwnerPct">--</div></div>
+          <div class="occ-card guest"><div class="occ-value" id="occGuest">--</div><div class="occ-label">Guest Nights</div><div class="occ-pct" id="occGuestPct">--</div></div>
+          <div class="occ-card rental"><div class="occ-value" id="occRental">--</div><div class="occ-label">Rental Nights</div><div class="occ-pct" id="occRentalPct">--</div></div>
+          <div class="occ-card vacant"><div class="occ-value" id="occVacant">--</div><div class="occ-label">Vacant Nights</div><div class="occ-pct" id="occVacantPct">--</div></div>
         </div>
-
-        <div class="section-card">
-          <h3>Monthly Breakdown</h3>
-          <div id="occupancyTableContainer"></div>
-        </div>
-
-        <div class="chart-card">
-          <h3>Occupancy Over Time</h3>
-          <div class="chart-container" style="height:300px;"><canvas id="occupancyBarChart"></canvas></div>
-        </div>
+        <div class="card"><h3>Monthly Breakdown</h3><div id="occTableContainer"></div></div>
+        <div class="card"><h3>Occupancy Over Time</h3><div class="chart-container" style="height:280px;"><canvas id="occupancyBarChart"></canvas></div></div>
       </div>
 
       <div class="tab-content" id="tab-expenses">
-        <div class="section-card">
-          <h3>Expense Breakdown</h3>
-          <div id="expenseTableContainer"></div>
-        </div>
-        
-        <div class="charts-grid">
-          <div class="chart-card">
-            <h3>By Category</h3>
-            <div class="chart-container"><canvas id="expensePieChart"></canvas></div>
-          </div>
-          <div class="chart-card">
-            <h3>Top Cost Drivers</h3>
-            <div class="chart-container"><canvas id="expenseBarChart"></canvas></div>
-          </div>
+        <div class="card"><h3>Expense Breakdown by Category</h3><div id="expenseTableContainer"></div></div>
+        <div class="grid-2">
+          <div class="card"><h3>By Category</h3><div class="chart-container"><canvas id="expensePieChart"></canvas></div></div>
+          <div class="card"><h3>Top Cost Drivers</h3><div class="chart-container"><canvas id="expenseBarChart"></canvas></div></div>
         </div>
       </div>
 
+      <div class="tab-content" id="tab-pareto">
+        <div class="card">
+          <h3>80/20 Pareto Analysis</h3>
+          <p style="font-size:0.75rem;color:var(--text-light);margin-bottom:1rem;">Items highlighted = ~80% of costs</p>
+          <div id="paretoTableContainer"></div>
+        </div>
+        <div class="card"><h3>Cumulative Distribution</h3><div class="chart-container" style="height:280px;"><canvas id="paretoChart"></canvas></div></div>
+      </div>
+
       <div class="tab-content" id="tab-heatmap">
-        <div class="section-card">
-          <h3>Expense Heat Map by Month</h3>
-          <div class="heatmap-container" id="heatmapContainer"></div>
+        <div class="card"><h3>Expense Heat Map</h3><div style="overflow-x:auto;" id="heatmapContainer"></div></div>
+      </div>
+
+      <div class="tab-content" id="tab-ai">
+        <div class="card">
+          <h3>AI Assistant</h3>
+          <p style="font-size:0.75rem;color:var(--text-light);margin-bottom:1rem;">Ask questions about your villa finances</p>
+          <div class="chat-container">
+            <div class="chat-messages" id="chatMessages">
+              <div class="chat-message ai"><div class="bubble">Hello! Ask me about your villa finances:<br>• "What month had highest payroll?"<br>• "Compare Nov vs Dec expenses"<br>• "What's driving costs?"</div></div>
+            </div>
+            <div class="chat-input-area">
+              <input type="text" id="chatInput" placeholder="Ask about your villa data..." onkeypress="if(event.key==='Enter')sendChat()">
+              <button class="btn btn-primary btn-sm" onclick="sendChat()">Send</button>
+            </div>
+          </div>
         </div>
       </div>
 
       <div class="tab-content" id="tab-upload">
-        <div class="section-card upload-section">
+        <div class="card" style="max-width:500px;">
           <h3>Upload Statement</h3>
           <div class="upload-zone" id="uploadZone">
             <div class="upload-icon">📄</div>
             <p class="upload-text"><strong>Click to upload</strong> or drag & drop</p>
-            <p class="upload-text">Amanyara Monthly Statement PDF</p>
+            <p class="upload-text">Amanyara Statement PDF</p>
           </div>
           <input type="file" id="fileInput" class="file-input" accept=".pdf">
           <div class="upload-status" id="uploadStatus"></div>
@@ -344,51 +277,33 @@
   </div>
 
   <script>
-    let currentUser = null;
-    let dashboardData = null;
-    let allStatements = [];
-    let availableYears = [];
-    let charts = {};
+    let currentUser = null, dashboardData = null, allStatements = [], availableYears = [], charts = {}, selectedIds = new Set();
+    const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     async function checkAuth() {
       try {
         const res = await fetch('/api/auth/status');
         const data = await res.json();
-        if (data.authenticated) {
-          currentUser = data.username;
-          showDashboard();
-        }
+        if (data.authenticated) { currentUser = data.username; showDashboard(); }
       } catch (err) {}
     }
 
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const username = document.getElementById('username').value;
-      const password = document.getElementById('password').value;
       const errorEl = document.getElementById('loginError');
       try {
         const res = await fetch('/api/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password })
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: document.getElementById('username').value, password: document.getElementById('password').value })
         });
         const data = await res.json();
-        if (data.success) {
-          currentUser = data.username;
-          showDashboard();
-        } else {
-          errorEl.textContent = data.error || 'Login failed';
-          errorEl.style.display = 'block';
-        }
-      } catch (err) {
-        errorEl.textContent = 'Connection error';
-        errorEl.style.display = 'block';
-      }
+        if (data.success) { currentUser = data.username; showDashboard(); }
+        else { errorEl.textContent = data.error || 'Login failed'; errorEl.style.display = 'block'; }
+      } catch (err) { errorEl.textContent = 'Connection error'; errorEl.style.display = 'block'; }
     });
 
     async function logout() {
       await fetch('/api/logout', { method: 'POST' });
-      currentUser = null;
       document.getElementById('loginContainer').classList.remove('hidden');
       document.getElementById('dashboard').classList.remove('active');
     }
@@ -401,409 +316,294 @@
     }
 
     async function loadInitialData() {
-      try {
-        const res = await fetch('/api/statements');
-        const data = await res.json();
-        allStatements = data.statements || [];
-        availableYears = data.availableYears || [];
-        populateSelectors();
-        if (allStatements.length > 0) {
-          document.getElementById('monthSelect').options[0].selected = true;
-          await loadSelectedMonths();
-        }
-      } catch (err) {
-        console.error('Failed to load data:', err);
+      const res = await fetch('/api/statements');
+      const data = await res.json();
+      allStatements = data.statements || [];
+      availableYears = data.availableYears || [];
+      buildMonthGrid();
+      buildQuickSelect();
+      // Select most recent by default
+      if (allStatements.length > 0) {
+        toggleMonth(allStatements[0].id);
       }
     }
 
-    function populateSelectors() {
-      const monthSelect = document.getElementById('monthSelect');
-      const yearSelect = document.getElementById('yearSelect');
-      const viewMode = document.getElementById('viewMode');
-      
-      viewMode.innerHTML = `
-        <option value="single">Individual Months</option>
-        ${availableYears.map(y => `<option value="year-${y}">Calendar Year ${y}</option>`).join('')}
-        <option value="rolling12">Rolling 12 Months</option>
-      `;
-      
-      const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      monthSelect.innerHTML = allStatements.map(s => 
-        `<option value="${s.id}">${months[s.month]} ${s.year}</option>`
-      ).join('');
-      
-      yearSelect.innerHTML = availableYears.map(y => `<option value="${y}">${y}</option>`).join('');
+    function buildQuickSelect() {
+      const select = document.getElementById('quickSelect');
+      select.innerHTML = `<option value="">-- Quick Select --</option>
+        ${availableYears.map(y => `<option value="year-${y}">All of ${y}</option>`).join('')}
+        <option value="rolling12">Rolling 12 Months</option>`;
     }
 
-    function changeViewMode() {
-      const mode = document.getElementById('viewMode').value;
-      const monthGroup = document.getElementById('monthGroup');
-      const yearGroup = document.getElementById('yearGroup');
+    function buildMonthGrid() {
+      const grid = document.getElementById('monthGrid');
+      grid.innerHTML = allStatements.map(s => `
+        <div class="month-chip" data-id="${s.id}" onclick="toggleMonth(${s.id})">
+          <span class="check">✓</span>
+          <span>${monthNames[s.month]} ${s.year}</span>
+        </div>
+      `).join('');
+    }
+
+    function toggleMonth(id) {
+      if (selectedIds.has(id)) {
+        selectedIds.delete(id);
+      } else {
+        selectedIds.add(id);
+      }
+      updateChipStyles();
+      loadSelectedData();
+      document.getElementById('quickSelect').value = '';
+    }
+
+    function updateChipStyles() {
+      document.querySelectorAll('.month-chip').forEach(chip => {
+        const id = parseInt(chip.dataset.id);
+        chip.classList.toggle('selected', selectedIds.has(id));
+      });
+    }
+
+    function selectAll() {
+      selectedIds = new Set(allStatements.map(s => s.id));
+      updateChipStyles();
+      loadSelectedData();
+      document.getElementById('quickSelect').value = '';
+    }
+
+    function selectNone() {
+      selectedIds.clear();
+      updateChipStyles();
+      document.getElementById('viewInfo').textContent = 'No months selected';
+      dashboardData = null;
+    }
+
+    function quickSelectChange() {
+      const mode = document.getElementById('quickSelect').value;
+      if (!mode) return;
       
-      if (mode === 'single') {
-        monthGroup.style.display = 'block';
-        yearGroup.style.display = 'none';
-        loadSelectedMonths();
-      } else if (mode === 'rolling12') {
-        monthGroup.style.display = 'none';
-        yearGroup.style.display = 'none';
-        loadRolling12();
+      if (mode === 'rolling12') {
+        // Select last 12 months
+        const sorted = [...allStatements].sort((a, b) => b.year - a.year || b.month - a.month);
+        selectedIds = new Set(sorted.slice(0, 12).map(s => s.id));
       } else if (mode.startsWith('year-')) {
-        monthGroup.style.display = 'none';
-        yearGroup.style.display = 'none';
-        loadYearData(mode.split('-')[1]);
+        const year = parseInt(mode.split('-')[1]);
+        selectedIds = new Set(allStatements.filter(s => s.year === year).map(s => s.id));
       }
+      updateChipStyles();
+      loadSelectedData();
     }
 
-    async function loadSelectedMonths() {
-      const select = document.getElementById('monthSelect');
-      const selectedIds = Array.from(select.selectedOptions).map(o => o.value);
-      if (selectedIds.length === 0) return;
-      
-      try {
-        const res = await fetch(`/api/dashboard?ids=${selectedIds.join(',')}`);
-        dashboardData = await res.json();
-        document.getElementById('viewInfo').textContent = `${dashboardData.statements.length} month(s) selected`;
-        updateDisplay();
-      } catch (err) {
-        console.error('Failed to load months:', err);
+    async function loadSelectedData() {
+      if (selectedIds.size === 0) {
+        document.getElementById('viewInfo').textContent = 'No months selected';
+        return;
       }
+      const ids = Array.from(selectedIds);
+      const res = await fetch('/api/dashboard?ids=' + ids.join(','));
+      dashboardData = await res.json();
+      document.getElementById('viewInfo').textContent = `${dashboardData.statements.length} month(s) selected`;
+      updateDisplay();
     }
 
-    async function loadYearData(year) {
-      if (!year) year = document.getElementById('yearSelect').value;
-      try {
-        const res = await fetch(`/api/dashboard?year=${year}`);
-        dashboardData = await res.json();
-        document.getElementById('viewInfo').textContent = `Calendar Year ${year} (${dashboardData.statements.length} months)`;
-        updateDisplay();
-      } catch (err) {
-        console.error('Failed to load year:', err);
-      }
-    }
-
-    async function loadRolling12() {
-      try {
-        const res = await fetch('/api/dashboard?rolling=12');
-        dashboardData = await res.json();
-        document.getElementById('viewInfo').textContent = `Rolling 12 Months (${dashboardData.statements.length} months)`;
-        updateDisplay();
-      } catch (err) {
-        console.error('Failed to load rolling 12:', err);
-      }
-    }
+    function fmt(n) { return '$' + (parseFloat(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function fmtK(n) { return '$' + ((parseFloat(n) || 0) / 1000).toFixed(1) + 'k'; }
 
     function updateDisplay() {
+      if (!dashboardData) return;
       const t = dashboardData.totals || {};
-      const statements = dashboardData.statements || [];
+      const ins = dashboardData.insights || {};
       
-      document.getElementById('kpiBalance').textContent = formatCurrency(t.totalBalance);
-      document.getElementById('kpiExpenses').textContent = formatCurrency(t.totalExpenses);
-      document.getElementById('kpiOwnerNights').textContent = t.totalOwnerNights || 0;
-      document.getElementById('kpiGuestNights').textContent = t.totalGuestNights || 0;
-      document.getElementById('kpiRentalNights').textContent = t.totalRentalNights || 0;
-      document.getElementById('kpiVacantNights').textContent = t.totalVacantNights || 0;
-      document.getElementById('kpiRevenue').textContent = formatCurrency(t.totalRevenue);
+      document.getElementById('kpiBalance').textContent = fmt(t.totalBalance);
+      document.getElementById('kpiExpenses').textContent = fmt(t.totalExpenses);
+      document.getElementById('kpiRevenue').textContent = fmt(t.totalRevenue);
+      
+      const net = (t.totalRevenue || 0) - (t.totalExpenses || 0);
+      const netEl = document.getElementById('kpiNet');
+      netEl.textContent = fmt(net);
+      netEl.className = 'kpi-value ' + (net >= 0 ? 'success' : 'danger');
       
       const totalNights = (t.totalOwnerNights||0) + (t.totalGuestNights||0) + (t.totalRentalNights||0) + (t.totalVacantNights||0);
-      document.getElementById('kpiTotalNights').textContent = totalNights;
+      const occupied = (t.totalOwnerNights||0) + (t.totalGuestNights||0) + (t.totalRentalNights||0);
+      document.getElementById('kpiNights').textContent = totalNights;
+      document.getElementById('kpiOccRate').textContent = totalNights > 0 ? `${(occupied/totalNights*100).toFixed(0)}% occupied` : '';
+      document.getElementById('kpiCostNight').textContent = occupied > 0 ? fmt(t.totalExpenses / occupied) : '--';
+      document.getElementById('kpiExpPct').textContent = t.totalRevenue > 0 ? `${(t.totalExpenses/t.totalRevenue*100).toFixed(0)}% of revenue` : '';
       
-      if (totalNights > 0) {
-        document.getElementById('kpiOwnerPct').textContent = `${((t.totalOwnerNights/totalNights)*100).toFixed(1)}% of nights`;
-        document.getElementById('kpiGuestPct').textContent = `${((t.totalGuestNights/totalNights)*100).toFixed(1)}% of nights`;
-        document.getElementById('kpiRentalPct').textContent = `${((t.totalRentalNights/totalNights)*100).toFixed(1)}% of nights`;
-        document.getElementById('kpiVacantPct').textContent = `${((t.totalVacantNights/totalNights)*100).toFixed(1)}% of nights`;
-      }
+      document.getElementById('insHighExp').textContent = ins.highestExpenseMonth || '--';
+      document.getElementById('insHighExpAmt').textContent = ins.highestExpenseAmount ? fmt(ins.highestExpenseAmount) : '';
+      document.getElementById('insLowExp').textContent = ins.lowestExpenseMonth || '--';
+      document.getElementById('insLowExpAmt').textContent = ins.lowestExpenseAmount ? fmt(ins.lowestExpenseAmount) : '';
+      document.getElementById('insHighRev').textContent = ins.highestRevenueMonth || '--';
+      document.getElementById('insHighRevAmt').textContent = ins.highestRevenueAmount ? fmt(ins.highestRevenueAmount) : '';
+      document.getElementById('insMostRental').textContent = ins.mostRentalMonth || '--';
+      document.getElementById('insMostRentalAmt').textContent = ins.mostRentalNights ? `${ins.mostRentalNights} nights` : '';
       
-      if (t.totalRevenue > 0) {
-        const expPct = ((t.totalExpenses / t.totalRevenue) * 100).toFixed(1);
-        document.getElementById('kpiExpensesPct').textContent = `${expPct}% of revenue`;
-      }
-      
-      // Occupancy tab
       document.getElementById('occOwner').textContent = t.totalOwnerNights || 0;
       document.getElementById('occGuest').textContent = t.totalGuestNights || 0;
       document.getElementById('occRental').textContent = t.totalRentalNights || 0;
       document.getElementById('occVacant').textContent = t.totalVacantNights || 0;
       if (totalNights > 0) {
-        document.getElementById('occOwnerPct').textContent = `${((t.totalOwnerNights/totalNights)*100).toFixed(1)}%`;
-        document.getElementById('occGuestPct').textContent = `${((t.totalGuestNights/totalNights)*100).toFixed(1)}%`;
-        document.getElementById('occRentalPct').textContent = `${((t.totalRentalNights/totalNights)*100).toFixed(1)}%`;
-        document.getElementById('occVacantPct').textContent = `${((t.totalVacantNights/totalNights)*100).toFixed(1)}%`;
+        document.getElementById('occOwnerPct').textContent = `${(t.totalOwnerNights/totalNights*100).toFixed(1)}%`;
+        document.getElementById('occGuestPct').textContent = `${(t.totalGuestNights/totalNights*100).toFixed(1)}%`;
+        document.getElementById('occRentalPct').textContent = `${(t.totalRentalNights/totalNights*100).toFixed(1)}%`;
+        document.getElementById('occVacantPct').textContent = `${(t.totalVacantNights/totalNights*100).toFixed(1)}%`;
       }
       
       updateCharts();
-      updateExpenseTable();
-      updateOccupancyTable();
-      updateHeatmap();
+      updateTables();
+    }
+
+    function updateTables() {
+      const cats = dashboardData.expensesByCategory || [];
+      const expContainer = document.getElementById('expenseTableContainer');
+      if (!cats.length) { expContainer.innerHTML = '<p style="color:var(--text-light)">No data</p>'; }
+      else {
+        const total = cats.reduce((s, c) => s + c.total, 0);
+        let html = `<table class="data-table"><thead><tr><th>Category / Item</th><th class="r">Amount</th><th class="r">%</th><th style="width:100px"></th></tr></thead><tbody>`;
+        for (const cat of cats) {
+          html += `<tr class="cat"><td>${cat.category}</td><td class="r">${fmt(cat.total)}</td><td class="r">${cat.pctOfTotal.toFixed(1)}%</td><td><span class="pct-bar" style="width:${cat.pctOfTotal}%"></span></td></tr>`;
+          for (const item of cat.items) html += `<tr class="item"><td>${item.subcategory}</td><td class="r">${fmt(item.total)}</td><td class="r">${item.pctOfTotal.toFixed(1)}%</td><td><span class="pct-bar" style="width:${item.pctOfTotal}%;background:#ddd"></span></td></tr>`;
+        }
+        html += `<tr class="total"><td>TOTAL</td><td class="r">${fmt(total)}</td><td class="r">100%</td><td></td></tr></tbody></table>`;
+        expContainer.innerHTML = html;
+      }
+
+      const items = dashboardData.paretoAnalysis || [];
+      const paretoContainer = document.getElementById('paretoTableContainer');
+      if (!items.length) { paretoContainer.innerHTML = '<p style="color:var(--text-light)">No data</p>'; }
+      else {
+        let html = `<table class="data-table"><thead><tr><th>#</th><th>Item</th><th>Category</th><th class="r">Amount</th><th class="r">%</th><th class="r">Cumul.</th><th style="width:80px"></th></tr></thead><tbody>`;
+        items.forEach((item, i) => {
+          const hl = item.cumulativePct <= 80 ? ' highlight' : '';
+          html += `<tr class="${hl}"><td>${i+1}</td><td>${item.name}</td><td style="color:var(--text-light)">${item.category}</td><td class="r">${fmt(item.total)}</td><td class="r">${item.pctOfTotal.toFixed(1)}%</td><td class="r"><strong>${item.cumulativePct.toFixed(0)}%</strong></td><td><span class="pct-bar cumulative" style="width:${item.cumulativePct}%"></span></td></tr>`;
+        });
+        html += `</tbody></table>`;
+        paretoContainer.innerHTML = html;
+      }
+
+      const stmts = dashboardData.statements || [];
+      const occContainer = document.getElementById('occTableContainer');
+      if (stmts.length <= 1) { occContainer.innerHTML = ''; }
+      else {
+        const sorted = [...stmts].sort((a, b) => a.year - b.year || a.month - b.month);
+        let totals = { o: 0, g: 0, r: 0, v: 0 };
+        let html = `<table class="data-table"><thead><tr><th>Type</th>${sorted.map(s => `<th class="r">${monthNames[s.month]}</th>`).join('')}<th class="r">Total</th></tr></thead><tbody>`;
+        html += `<tr><td>Owner</td>${sorted.map(s => { totals.o += s.owner_nights || 0; return `<td class="r">${s.owner_nights || 0}</td>`; }).join('')}<td class="r"><strong>${totals.o}</strong></td></tr>`;
+        html += `<tr><td>Guest</td>${sorted.map(s => { totals.g += s.guest_nights || 0; return `<td class="r">${s.guest_nights || 0}</td>`; }).join('')}<td class="r"><strong>${totals.g}</strong></td></tr>`;
+        html += `<tr><td>Rental</td>${sorted.map(s => { totals.r += s.rental_nights || 0; return `<td class="r">${s.rental_nights || 0}</td>`; }).join('')}<td class="r"><strong>${totals.r}</strong></td></tr>`;
+        html += `<tr><td>Vacant</td>${sorted.map(s => { totals.v += s.vacant_nights || 0; return `<td class="r">${s.vacant_nights || 0}</td>`; }).join('')}<td class="r"><strong>${totals.v}</strong></td></tr>`;
+        html += `<tr class="total"><td>Total</td>${sorted.map(s => `<td class="r">${(s.owner_nights||0)+(s.guest_nights||0)+(s.rental_nights||0)+(s.vacant_nights||0)}</td>`).join('')}<td class="r"><strong>${totals.o+totals.g+totals.r+totals.v}</strong></td></tr>`;
+        html += `</tbody></table>`;
+        occContainer.innerHTML = html;
+      }
+
+      const heatContainer = document.getElementById('heatmapContainer');
+      if (!cats.length || stmts.length <= 1) { heatContainer.innerHTML = '<p style="color:var(--text-light)">Need multiple months</p>'; }
+      else {
+        const sorted = [...stmts].sort((a, b) => a.year - b.year || a.month - b.month);
+        const monthKeys = sorted.map(s => `${s.year}-${String(s.month).padStart(2, '0')}`);
+        let maxVal = 0;
+        for (const cat of cats) for (const item of cat.items) for (const v of Object.values(item.monthly || {})) if (v > maxVal) maxVal = v;
+        const heatClass = v => { if (!v) return 'heat-0'; const p = v / maxVal; return p < 0.2 ? 'heat-1' : p < 0.4 ? 'heat-2' : p < 0.6 ? 'heat-3' : p < 0.8 ? 'heat-4' : 'heat-5'; };
+        let html = `<table class="heatmap"><thead><tr><th>Expense</th>${sorted.map(s => `<th>${monthNames[s.month]}</th>`).join('')}<th>Total</th></tr></thead><tbody>`;
+        for (const cat of cats) for (const item of cat.items) {
+          html += `<tr><td>${item.subcategory}</td>${monthKeys.map(mk => { const v = item.monthly?.[mk] || 0; return `<td class="${heatClass(v)}">${v ? fmtK(v) : '-'}</td>`; }).join('')}<td><strong>${fmtK(item.total)}</strong></td></tr>`;
+        }
+        html += `</tbody></table>`;
+        heatContainer.innerHTML = html;
+      }
+      
       updateRecentFiles();
-    }
-
-    function updateExpenseTable() {
-      const categories = dashboardData.expensesByCategory || [];
-      const container = document.getElementById('expenseTableContainer');
-      
-      if (categories.length === 0) {
-        container.innerHTML = '<p style="color:var(--text-light);">No expense data</p>';
-        return;
-      }
-      
-      let grandTotal = categories.reduce((sum, c) => sum + c.total, 0);
-      
-      let html = `<table class="expense-table">
-        <thead><tr>
-          <th>Category / Item</th>
-          <th class="num">Amount</th>
-          <th class="num">% of Total</th>
-          <th>Distribution</th>
-        </tr></thead><tbody>`;
-      
-      for (const cat of categories) {
-        html += `<tr class="category-row">
-          <td>${cat.category}</td>
-          <td class="num">${formatCurrency(cat.total)}</td>
-          <td class="num">${cat.pctOfTotal.toFixed(1)}%</td>
-          <td><span class="pct-bar" style="width:${cat.pctOfTotal}%;"></span></td>
-        </tr>`;
-        for (const item of cat.items) {
-          html += `<tr class="item-row">
-            <td>${item.subcategory}</td>
-            <td class="num">${formatCurrency(item.total)}</td>
-            <td class="num"><span class="pct-text">${item.pctOfTotal.toFixed(1)}%</span></td>
-            <td><span class="pct-bar" style="width:${item.pctOfTotal}%;background:#ddd;"></span></td>
-          </tr>`;
-        }
-      }
-      
-      html += `<tr class="total-row">
-        <td>TOTAL EXPENSES</td>
-        <td class="num">${formatCurrency(grandTotal)}</td>
-        <td class="num">100%</td>
-        <td></td>
-      </tr></tbody></table>`;
-      
-      container.innerHTML = html;
-    }
-
-    function updateOccupancyTable() {
-      const statements = dashboardData.statements || [];
-      const container = document.getElementById('occupancyTableContainer');
-      
-      if (statements.length <= 1) {
-        container.innerHTML = '';
-        return;
-      }
-      
-      const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const sorted = [...statements].sort((a,b) => a.year - b.year || a.month - b.month);
-      
-      let totals = { owner: 0, guest: 0, rental: 0, vacant: 0 };
-      
-      let html = `<table class="month-table"><thead><tr><th>Type</th>`;
-      for (const s of sorted) html += `<th>${months[s.month]} ${s.year}</th>`;
-      html += `<th>Total</th></tr></thead><tbody>`;
-      
-      html += `<tr><td>Owner</td>`;
-      for (const s of sorted) { totals.owner += s.owner_nights || 0; html += `<td>${s.owner_nights || 0}</td>`; }
-      html += `<td><strong>${totals.owner}</strong></td></tr>`;
-      
-      html += `<tr><td>Guest</td>`;
-      for (const s of sorted) { totals.guest += s.guest_nights || 0; html += `<td>${s.guest_nights || 0}</td>`; }
-      html += `<td><strong>${totals.guest}</strong></td></tr>`;
-      
-      html += `<tr><td>Rental</td>`;
-      for (const s of sorted) { totals.rental += s.rental_nights || 0; html += `<td>${s.rental_nights || 0}</td>`; }
-      html += `<td><strong>${totals.rental}</strong></td></tr>`;
-      
-      html += `<tr><td>Vacant</td>`;
-      for (const s of sorted) { totals.vacant += s.vacant_nights || 0; html += `<td>${s.vacant_nights || 0}</td>`; }
-      html += `<td><strong>${totals.vacant}</strong></td></tr>`;
-      
-      html += `<tr class="total-row"><td>Total</td>`;
-      for (const s of sorted) {
-        const t = (s.owner_nights||0) + (s.guest_nights||0) + (s.rental_nights||0) + (s.vacant_nights||0);
-        html += `<td>${t}</td>`;
-      }
-      html += `<td><strong>${totals.owner + totals.guest + totals.rental + totals.vacant}</strong></td></tr>`;
-      
-      html += `</tbody></table>`;
-      container.innerHTML = html;
-    }
-
-    function updateHeatmap() {
-      const categories = dashboardData.expensesByCategory || [];
-      const statements = dashboardData.statements || [];
-      const container = document.getElementById('heatmapContainer');
-      
-      if (categories.length === 0 || statements.length <= 1) {
-        container.innerHTML = '<p style="color:var(--text-light);">Need multiple months for heat map</p>';
-        return;
-      }
-      
-      const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const sorted = [...statements].sort((a,b) => a.year - b.year || a.month - b.month);
-      const monthKeys = sorted.map(s => `${s.year}-${String(s.month).padStart(2,'0')}`);
-      
-      // Find max for heat scale
-      let maxVal = 0;
-      for (const cat of categories) {
-        for (const item of cat.items) {
-          for (const val of Object.values(item.monthly || {})) {
-            if (val > maxVal) maxVal = val;
-          }
-        }
-      }
-      
-      function getHeatClass(val) {
-        if (!val || val === 0) return 'heat-0';
-        const pct = val / maxVal;
-        if (pct < 0.2) return 'heat-1';
-        if (pct < 0.4) return 'heat-2';
-        if (pct < 0.6) return 'heat-3';
-        if (pct < 0.8) return 'heat-4';
-        return 'heat-5';
-      }
-      
-      let html = `<table class="heatmap"><thead><tr><th>Expense</th>`;
-      for (const s of sorted) html += `<th>${months[s.month]}</th>`;
-      html += `<th>Total</th></tr></thead><tbody>`;
-      
-      for (const cat of categories) {
-        for (const item of cat.items) {
-          html += `<tr><td>${item.subcategory}</td>`;
-          for (const mk of monthKeys) {
-            const val = item.monthly?.[mk] || 0;
-            html += `<td class="${getHeatClass(val)}">${val > 0 ? formatCurrency(val) : '-'}</td>`;
-          }
-          html += `<td><strong>${formatCurrency(item.total)}</strong></td></tr>`;
-        }
-      }
-      
-      html += `</tbody></table>`;
-      container.innerHTML = html;
     }
 
     function updateCharts() {
       Object.values(charts).forEach(c => c.destroy());
       charts = {};
+      if (!dashboardData) return;
       
-      const statements = dashboardData.statements || [];
-      const totals = dashboardData.totals || {};
-      const categories = dashboardData.expensesByCategory || [];
+      const stmts = dashboardData.statements || [];
+      const t = dashboardData.totals || {};
+      const cats = dashboardData.expensesByCategory || [];
+      const pareto = dashboardData.paretoAnalysis || [];
+      if (!stmts.length) return;
       
-      if (statements.length === 0) return;
+      const sorted = [...stmts].sort((a, b) => a.year - b.year || a.month - b.month);
+      const labels = sorted.map(s => `${monthNames[s.month]} ${s.year}`);
       
-      const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const sorted = [...statements].sort((a,b) => a.year - b.year || a.month - b.month);
-      
-      // Expense trend
       charts.expense = new Chart(document.getElementById('expenseChart'), {
-        type: 'line',
-        data: {
-          labels: sorted.map(s => `${months[s.month]} ${s.year}`),
-          datasets: [{
-            label: 'Expenses',
-            data: sorted.map(s => parseFloat(s.total_expenses) || 0),
-            borderColor: '#c9a962',
-            backgroundColor: 'rgba(201,169,98,0.1)',
-            fill: true,
-            tension: 0.4
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
-          scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + (v/1000).toFixed(0) + 'k' } } }
-        }
+        type: 'line', data: { labels, datasets: [{ label: 'Expenses', data: sorted.map(s => parseFloat(s.total_expenses) || 0), borderColor: '#c9a962', backgroundColor: 'rgba(201,169,98,0.1)', fill: true, tension: 0.4 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + (v/1000).toFixed(0) + 'k' } } } }
       });
       
-      // Occupancy donut
       charts.occupancy = new Chart(document.getElementById('occupancyChart'), {
-        type: 'doughnut',
-        data: {
-          labels: ['Owner', 'Guest', 'Rental', 'Vacant'],
-          datasets: [{
-            data: [totals.totalOwnerNights||0, totals.totalGuestNights||0, totals.totalRentalNights||0, totals.totalVacantNights||0],
-            backgroundColor: ['#2d5a6e', '#c9a962', '#4a9e6e', '#ccc']
-          }]
-        },
+        type: 'doughnut', data: { labels: ['Owner', 'Guest', 'Rental', 'Vacant'], datasets: [{ data: [t.totalOwnerNights||0, t.totalGuestNights||0, t.totalRentalNights||0, t.totalVacantNights||0], backgroundColor: ['#2d5a6e', '#c9a962', '#4a9e6e', '#ccc'] }] },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
       });
       
-      // Occupancy bar
       charts.occupancyBar = new Chart(document.getElementById('occupancyBarChart'), {
-        type: 'bar',
-        data: {
-          labels: sorted.map(s => `${months[s.month]} ${s.year}`),
-          datasets: [
-            { label: 'Owner', data: sorted.map(s => s.owner_nights||0), backgroundColor: '#2d5a6e' },
-            { label: 'Guest', data: sorted.map(s => s.guest_nights||0), backgroundColor: '#c9a962' },
-            { label: 'Rental', data: sorted.map(s => s.rental_nights||0), backgroundColor: '#4a9e6e' },
-            { label: 'Vacant', data: sorted.map(s => s.vacant_nights||0), backgroundColor: '#ccc' }
-          ]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          scales: { x: { stacked: true }, y: { stacked: true } },
-          plugins: { legend: { position: 'bottom' } }
-        }
+        type: 'bar', data: { labels, datasets: [
+          { label: 'Owner', data: sorted.map(s => s.owner_nights || 0), backgroundColor: '#2d5a6e' },
+          { label: 'Guest', data: sorted.map(s => s.guest_nights || 0), backgroundColor: '#c9a962' },
+          { label: 'Rental', data: sorted.map(s => s.rental_nights || 0), backgroundColor: '#4a9e6e' },
+          { label: 'Vacant', data: sorted.map(s => s.vacant_nights || 0), backgroundColor: '#ccc' }
+        ] },
+        options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true } }, plugins: { legend: { position: 'bottom' } } }
       });
       
-      // Expense pie
-      if (categories.length > 0) {
-        const colors = ['#1a3a4a', '#2d5a6e', '#c9a962', '#4a9e6e', '#7a6e5e', '#a08060', '#5a8a9e'];
+      if (cats.length) {
+        const colors = ['#1a3a4a', '#2d5a6e', '#c9a962', '#4a9e6e', '#7a6e5e', '#a08060'];
         charts.expensePie = new Chart(document.getElementById('expensePieChart'), {
-          type: 'pie',
-          data: {
-            labels: categories.map(c => c.category),
-            datasets: [{ data: categories.map(c => c.total), backgroundColor: colors.slice(0, categories.length) }]
-          },
+          type: 'pie', data: { labels: cats.map(c => c.category), datasets: [{ data: cats.map(c => c.total), backgroundColor: colors }] },
           options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
         });
-        
-        // Top cost drivers (horizontal bar)
-        const allItems = categories.flatMap(c => c.items.map(i => ({ name: i.subcategory, total: i.total })));
-        const topItems = allItems.sort((a,b) => b.total - a.total).slice(0, 8);
-        
+        const topItems = cats.flatMap(c => c.items).sort((a, b) => b.total - a.total).slice(0, 8);
         charts.expenseBar = new Chart(document.getElementById('expenseBarChart'), {
-          type: 'bar',
-          data: {
-            labels: topItems.map(i => i.name),
-            datasets: [{ data: topItems.map(i => i.total), backgroundColor: '#c9a962' }]
+          type: 'bar', data: { labels: topItems.map(i => i.subcategory), datasets: [{ data: topItems.map(i => i.total), backgroundColor: '#c9a962' }] },
+          options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { callback: v => '$' + (v/1000).toFixed(0) + 'k' } } } }
+        });
+      }
+      
+      if (pareto.length) {
+        charts.pareto = new Chart(document.getElementById('paretoChart'), {
+          type: 'bar', data: {
+            labels: pareto.slice(0, 12).map((_, i) => i + 1),
+            datasets: [
+              { type: 'bar', label: 'Amount', data: pareto.slice(0, 12).map(i => i.total), backgroundColor: pareto.slice(0, 12).map(i => i.cumulativePct <= 80 ? '#c9a962' : '#ddd'), yAxisID: 'y' },
+              { type: 'line', label: 'Cumulative %', data: pareto.slice(0, 12).map(i => i.cumulativePct), borderColor: '#1a3a4a', backgroundColor: 'transparent', yAxisID: 'y1', tension: 0.4 }
+            ]
           },
-          options: {
-            indexAxis: 'y',
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: { x: { ticks: { callback: v => '$' + (v/1000).toFixed(0) + 'k' } } }
-          }
+          options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + (v/1000).toFixed(0) + 'k' } }, y1: { position: 'right', min: 0, max: 100, ticks: { callback: v => v + '%' } } }, plugins: { legend: { position: 'bottom' } } }
         });
       }
     }
 
     function updateRecentFiles() {
-      const files = dashboardData.recentFiles || [];
-      const list = document.getElementById('fileList');
-      if (files.length === 0) {
-        list.innerHTML = '<p style="color:var(--text-light);font-size:0.85rem;">No uploads yet</p>';
-        return;
+      const files = dashboardData?.recentFiles || [];
+      document.getElementById('fileList').innerHTML = files.length ? files.slice(0, 8).map(f => `<div class="file-item"><span>${f.filename}</span><span style="color:var(--text-light)">${new Date(f.upload_date).toLocaleDateString()}</span></div>`).join('') : '<p style="color:var(--text-light);font-size:0.75rem">No uploads</p>';
+    }
+
+    async function sendChat() {
+      const input = document.getElementById('chatInput');
+      const question = input.value.trim();
+      if (!question) return;
+      const messagesEl = document.getElementById('chatMessages');
+      messagesEl.innerHTML += `<div class="chat-message user"><div class="bubble">${question}</div><div class="meta">You</div></div>`;
+      input.value = '';
+      messagesEl.innerHTML += `<div class="chat-message ai" id="typing"><div class="bubble" style="color:var(--text-light)">Thinking...</div></div>`;
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      
+      try {
+        const res = await fetch('/api/ai/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question }) });
+        const data = await res.json();
+        document.getElementById('typing')?.remove();
+        messagesEl.innerHTML += `<div class="chat-message ai"><div class="bubble">${data.error ? `<span style="color:var(--danger)">${data.error}</span>` : data.answer.replace(/\n/g, '<br>')}</div><div class="meta">AI</div></div>`;
+      } catch (err) {
+        document.getElementById('typing')?.remove();
+        messagesEl.innerHTML += `<div class="chat-message ai"><div class="bubble" style="color:var(--danger)">Error: ${err.message}</div></div>`;
       }
-      list.innerHTML = files.slice(0, 10).map(f => `
-        <div class="file-item">
-          <span>${f.filename}</span>
-          <span style="color:var(--text-light);">${new Date(f.upload_date).toLocaleDateString()}</span>
-        </div>
-      `).join('');
+      messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
-    function formatCurrency(n) {
-      return '$' + (parseFloat(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
-
-    // Tab switching
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -813,49 +613,30 @@
       });
     });
 
-    // Upload
     const uploadZone = document.getElementById('uploadZone');
     const fileInput = document.getElementById('fileInput');
     const uploadStatus = document.getElementById('uploadStatus');
-
-    uploadZone.addEventListener('click', () => fileInput.click());
-    uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.style.borderColor = 'var(--accent)'; });
-    uploadZone.addEventListener('dragleave', () => { uploadZone.style.borderColor = ''; });
-    uploadZone.addEventListener('drop', e => {
-      e.preventDefault();
-      uploadZone.style.borderColor = '';
-      if (e.dataTransfer.files.length) handleUpload(e.dataTransfer.files[0]);
-    });
-    fileInput.addEventListener('change', () => { if (fileInput.files.length) handleUpload(fileInput.files[0]); });
+    uploadZone.onclick = () => fileInput.click();
+    uploadZone.ondragover = e => { e.preventDefault(); uploadZone.style.borderColor = 'var(--accent)'; };
+    uploadZone.ondragleave = () => uploadZone.style.borderColor = '';
+    uploadZone.ondrop = e => { e.preventDefault(); uploadZone.style.borderColor = ''; if (e.dataTransfer.files.length) handleUpload(e.dataTransfer.files[0]); };
+    fileInput.onchange = () => { if (fileInput.files.length) handleUpload(fileInput.files[0]); };
 
     async function handleUpload(file) {
-      if (!file.name.toLowerCase().endsWith('.pdf')) {
-        uploadStatus.className = 'upload-status error';
-        uploadStatus.textContent = 'Please upload a PDF';
-        return;
-      }
-      uploadStatus.className = 'upload-status loading';
-      uploadStatus.textContent = 'Processing...';
-      
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('fileType', 'statement');
-      
+      if (!file.name.toLowerCase().endsWith('.pdf')) { uploadStatus.className = 'upload-status error'; uploadStatus.textContent = 'Please upload a PDF'; return; }
+      uploadStatus.className = 'upload-status loading'; uploadStatus.textContent = 'Processing...';
+      const formData = new FormData(); formData.append('file', file);
       try {
         const res = await fetch('/api/upload', { method: 'POST', body: formData });
         const data = await res.json();
-        if (data.success) {
-          uploadStatus.className = 'upload-status success';
-          uploadStatus.textContent = `Processed: ${file.name}`;
-          await loadInitialData();
-        } else {
-          uploadStatus.className = 'upload-status error';
-          uploadStatus.textContent = data.error || 'Failed';
+        if (data.success) { 
+          const occ = data.parsed?.occupancy || {};
+          uploadStatus.className = 'upload-status success'; 
+          uploadStatus.textContent = `✓ ${file.name} - Owner:${occ.ownerNights||0} Guest:${occ.guestNights||0} Rental:${occ.rentalNights||0} Vacant:${occ.vacantNights||0}`; 
+          await loadInitialData(); 
         }
-      } catch (err) {
-        uploadStatus.className = 'upload-status error';
-        uploadStatus.textContent = 'Upload failed';
-      }
+        else { uploadStatus.className = 'upload-status error'; uploadStatus.textContent = data.error || 'Failed'; }
+      } catch (err) { uploadStatus.className = 'upload-status error'; uploadStatus.textContent = 'Upload failed'; }
       fileInput.value = '';
     }
 
