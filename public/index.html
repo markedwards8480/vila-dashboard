@@ -4,625 +4,103 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Villa 8 | Amanyara Dashboard</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600&family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    :root {
-      --primary: #1a3a4a;
-      --primary-light: #2d5a6e;
-      --accent: #c9a962;
-      --text: #1a1a1a;
-      --text-light: #666;
-      --card-bg: rgba(255, 255, 255, 0.85);
-      --glass-border: rgba(255, 255, 255, 0.3);
-      --shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-      --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.15);
-    }
-    body {
-      font-family: 'Montserrat', sans-serif;
-      background: linear-gradient(135deg, #e8e4dc 0%, #d4cfc4 50%, #c9c4b8 100%);
-      min-height: 100vh;
-      color: var(--text);
-    }
-    body::before {
-      content: '';
-      position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: radial-gradient(ellipse at 20% 20%, rgba(201, 169, 98, 0.1) 0%, transparent 50%),
-                  radial-gradient(ellipse at 80% 80%, rgba(26, 58, 74, 0.08) 0%, transparent 50%);
-      pointer-events: none;
-    }
-    h1, h2, h3 { font-family: 'Cormorant Garamond', serif; font-weight: 400; letter-spacing: 0.02em; }
-    .login-container {
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 2rem;
-      position: relative;
-      z-index: 1;
-    }
-    .login-card {
-      background: var(--card-bg);
-      backdrop-filter: blur(20px);
-      border: 1px solid var(--glass-border);
-      border-radius: 24px;
-      padding: 3rem;
-      width: 100%;
-      max-width: 420px;
-      box-shadow: var(--shadow-lg);
-    }
+    :root { --primary: #1a3a4a; --primary-light: #2d5a6e; --accent: #c9a962; --text: #1a1a1a; --text-light: #666; --card-bg: rgba(255,255,255,0.85); --glass-border: rgba(255,255,255,0.3); --shadow: 0 8px 32px rgba(0,0,0,0.1); }
+    body { font-family: 'Montserrat', sans-serif; background: linear-gradient(135deg, #e8e4dc 0%, #d4cfc4 50%, #c9c4b8 100%); min-height: 100vh; color: var(--text); }
+    h1,h2,h3 { font-family: 'Cormorant Garamond', serif; font-weight: 400; }
+    .login-container { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem; }
+    .login-card { background: var(--card-bg); backdrop-filter: blur(20px); border-radius: 24px; padding: 3rem; width: 100%; max-width: 420px; box-shadow: var(--shadow); }
     .login-logo { text-align: center; margin-bottom: 2rem; }
-    .login-logo h1 { font-size: 2.5rem; color: var(--primary); margin-bottom: 0.25rem; }
+    .login-logo h1 { font-size: 2.5rem; color: var(--primary); }
     .login-logo span { font-size: 0.85rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.3em; }
     .form-group { margin-bottom: 1.5rem; }
     .form-group label { display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-light); margin-bottom: 0.5rem; }
-    .form-group input {
-      width: 100%;
-      padding: 1rem 1.25rem;
-      border: 1px solid rgba(0, 0, 0, 0.1);
-      border-radius: 12px;
-      font-family: inherit;
-      font-size: 1rem;
-      background: rgba(255, 255, 255, 0.8);
-      transition: all 0.3s ease;
-    }
-    .form-group input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(201, 169, 98, 0.15); }
-    .btn {
-      width: 100%;
-      padding: 1rem 2rem;
-      border: none;
-      border-radius: 12px;
-      font-family: inherit;
-      font-size: 0.9rem;
-      font-weight: 500;
-      text-transform: uppercase;
-      letter-spacing: 0.15em;
-      cursor: pointer;
-      transition: all 0.3s ease;
-    }
-    .btn-primary { background: var(--primary); color: white; }
-    .btn-primary:hover { background: var(--primary-light); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(26, 58, 74, 0.3); }
-    .error-message { background: #fee; color: #c00; padding: 0.75rem 1rem; border-radius: 8px; font-size: 0.85rem; margin-bottom: 1rem; display: none; }
-    .dashboard { display: none; min-height: 100vh; position: relative; z-index: 1; }
+    .form-group input, .form-group select { width: 100%; padding: 1rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 12px; font-family: inherit; font-size: 1rem; }
+    .form-group input:focus { outline: none; border-color: var(--accent); }
+    .btn { padding: 1rem 2rem; border: none; border-radius: 12px; font-family: inherit; font-size: 0.9rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.15em; cursor: pointer; transition: all 0.3s; }
+    .btn-primary { background: var(--primary); color: white; width: 100%; }
+    .btn-primary:hover { background: var(--primary-light); }
+    .error-message { background: #fee; color: #c00; padding: 0.75rem; border-radius: 8px; margin-bottom: 1rem; display: none; }
+    .dashboard { display: none; min-height: 100vh; }
     .dashboard.active { display: block; }
     .login-container.hidden { display: none; }
-    .header {
-      background: var(--card-bg);
-      backdrop-filter: blur(20px);
-      border-bottom: 1px solid var(--glass-border);
-      padding: 1rem 2rem;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-    }
+    .header { background: var(--card-bg); backdrop-filter: blur(20px); padding: 1rem 2rem; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
     .header-brand { display: flex; align-items: center; gap: 1rem; }
     .header-brand h1 { font-size: 1.5rem; color: var(--primary); }
-    .header-brand span { font-size: 0.7rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.2em; background: rgba(201, 169, 98, 0.15); padding: 0.35rem 0.75rem; border-radius: 4px; }
-    .header-actions { display: flex; align-items: center; gap: 1rem; }
-    .header-btn { padding: 0.5rem 1rem; border: 1px solid var(--glass-border); border-radius: 8px; background: transparent; font-family: inherit; font-size: 0.8rem; color: var(--text); cursor: pointer; transition: all 0.2s ease; }
-    .header-btn:hover { background: var(--primary); color: white; border-color: var(--primary); }
+    .header-brand span { font-size: 0.7rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.2em; background: rgba(201,169,98,0.15); padding: 0.35rem 0.75rem; border-radius: 4px; }
+    .header-btn { padding: 0.5rem 1rem; border: 1px solid var(--glass-border); border-radius: 8px; background: transparent; font-family: inherit; font-size: 0.8rem; cursor: pointer; margin-left: 0.5rem; }
+    .header-btn:hover { background: var(--primary); color: white; }
     .main-content { padding: 2rem; max-width: 1600px; margin: 0 auto; }
-    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
-    .kpi-card {
-      background: var(--card-bg);
-      backdrop-filter: blur(20px);
-      border: 1px solid var(--glass-border);
-      border-radius: 20px;
-      padding: 1.75rem;
-      box-shadow: var(--shadow);
-      transition: all 0.3s ease;
-    }
-    .kpi-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
-    .kpi-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.15em; color: var(--text-light); margin-bottom: 0.75rem; }
-    .kpi-value { font-family: 'Cormorant Garamond', serif; font-size: 2.5rem; font-weight: 500; color: var(--primary); margin-bottom: 0.5rem; }
+    .statement-selector { background: var(--card-bg); border-radius: 16px; padding: 1.25rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem; box-shadow: var(--shadow); }
+    .statement-selector label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-light); }
+    .statement-selector select { flex: 1; max-width: 300px; padding: 0.75rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; font-family: inherit; }
+    .statement-count { font-size: 0.8rem; color: var(--text-light); margin-left: auto; }
+    .tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; background: var(--card-bg); border-radius: 12px; padding: 0.5rem; box-shadow: var(--shadow); flex-wrap: wrap; }
+    .tab-btn { padding: 0.75rem 1.25rem; border: none; border-radius: 8px; font-family: inherit; font-size: 0.8rem; font-weight: 500; color: var(--text-light); background: transparent; cursor: pointer; }
+    .tab-btn:hover { color: var(--primary); }
+    .tab-btn.active { background: var(--primary); color: white; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+    .kpi-card { background: var(--card-bg); border-radius: 20px; padding: 1.5rem; box-shadow: var(--shadow); }
+    .kpi-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-light); margin-bottom: 0.5rem; }
+    .kpi-value { font-family: 'Cormorant Garamond', serif; font-size: 2.25rem; font-weight: 500; color: var(--primary); }
     .kpi-value.accent { color: var(--accent); }
-    .kpi-change { font-size: 0.8rem; color: var(--text-light); }
-    .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
-    @media (max-width: 600px) { .charts-grid { grid-template-columns: 1fr; } }
-    .chart-card {
-      background: var(--card-bg);
-      backdrop-filter: blur(20px);
-      border: 1px solid var(--glass-border);
-      border-radius: 20px;
-      padding: 1.75rem;
-      box-shadow: var(--shadow);
-    }
-    .chart-card h3 { font-size: 1.25rem; color: var(--primary); margin-bottom: 1.5rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--glass-border); }
-    .chart-container { position: relative; height: 300px; }
-    .expense-list { max-height: 350px; overflow-y: auto; }
-    .expense-item { display: flex; justify-content: space-between; align-items: center; padding: 0.85rem 0; border-bottom: 1px solid rgba(0, 0, 0, 0.05); }
-    .expense-item:last-child { border-bottom: none; }
-    .expense-category { font-size: 0.9rem; }
-    .expense-subcategory { font-size: 0.75rem; color: var(--text-light); }
-    .expense-amount { font-weight: 500; color: var(--primary); }
-    .upload-section {
-      background: var(--card-bg);
-      backdrop-filter: blur(20px);
-      border: 1px solid var(--glass-border);
-      border-radius: 20px;
-      padding: 1.75rem;
-      margin-bottom: 2rem;
-      box-shadow: var(--shadow);
-    }
-    .upload-section h3 { font-size: 1.25rem; color: var(--primary); margin-bottom: 1.5rem; }
-    .upload-zone { border: 2px dashed var(--glass-border); border-radius: 16px; padding: 2.5rem; text-align: center; cursor: pointer; transition: all 0.3s ease; }
-    .upload-zone:hover { border-color: var(--accent); background: rgba(201, 169, 98, 0.05); }
-    .upload-zone.dragover { border-color: var(--accent); background: rgba(201, 169, 98, 0.1); }
+    .kpi-change { font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem; }
+    .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+    .chart-card { background: var(--card-bg); border-radius: 20px; padding: 1.5rem; box-shadow: var(--shadow); }
+    .chart-card h3 { font-size: 1.1rem; color: var(--primary); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(0,0,0,0.05); }
+    .chart-container { position: relative; height: 280px; }
+    .occupancy-calendar { background: var(--card-bg); border-radius: 20px; padding: 1.5rem; box-shadow: var(--shadow); margin-bottom: 1.5rem; }
+    .occupancy-calendar h3 { font-size: 1.1rem; color: var(--primary); margin-bottom: 1rem; }
+    .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+    .calendar-header { font-size: 0.7rem; text-transform: uppercase; color: var(--text-light); text-align: center; padding: 0.5rem; }
+    .calendar-day { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border-radius: 8px; font-size: 0.8rem; font-weight: 500; }
+    .calendar-day.empty { background: transparent; }
+    .calendar-day.owner { background: #2d5a6e; color: white; }
+    .calendar-day.guest { background: #c9a962; color: white; }
+    .calendar-day.rental { background: #4a9e6e; color: white; }
+    .calendar-day.vacant { background: #f0ede8; color: var(--text-light); }
+    .calendar-legend { display: flex; gap: 1.5rem; margin-top: 1rem; flex-wrap: wrap; }
+    .legend-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; }
+    .legend-color { width: 16px; height: 16px; border-radius: 4px; }
+    .occupancy-timeline { margin-top: 1.5rem; }
+    .timeline-item { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 0; border-bottom: 1px solid rgba(0,0,0,0.05); }
+    .timeline-type { width: 80px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+    .timeline-type.owner { color: #2d5a6e; }
+    .timeline-type.guest { color: #c9a962; }
+    .timeline-type.rental { color: #4a9e6e; }
+    .timeline-type.vacant { color: var(--text-light); }
+    .timeline-dates { flex: 1; font-size: 0.85rem; }
+    .timeline-nights { font-weight: 600; color: var(--primary); }
+    .expense-breakdown { display: grid; grid-template-columns: 320px 1fr; gap: 1.5rem; }
+    @media (max-width: 900px) { .expense-breakdown { grid-template-columns: 1fr; } .charts-grid { grid-template-columns: 1fr; } }
+    .expense-categories { background: var(--card-bg); border-radius: 20px; padding: 1.5rem; box-shadow: var(--shadow); }
+    .expense-categories h3 { font-size: 1.1rem; color: var(--primary); margin-bottom: 1rem; }
+    .category-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid rgba(0,0,0,0.05); cursor: pointer; }
+    .category-item:hover { background: rgba(201,169,98,0.05); margin: 0 -1rem; padding: 0.75rem 1rem; }
+    .category-item.active { background: rgba(201,169,98,0.1); margin: 0 -1rem; padding: 0.75rem 1rem; border-radius: 8px; }
+    .category-name { font-size: 0.85rem; font-weight: 500; }
+    .category-amount { font-weight: 600; color: var(--primary); font-size: 0.9rem; }
+    .category-bar { height: 4px; background: rgba(0,0,0,0.05); border-radius: 2px; margin-top: 0.4rem; }
+    .category-bar-fill { height: 100%; background: var(--accent); border-radius: 2px; }
+    .expense-visuals { background: var(--card-bg); border-radius: 20px; padding: 1.5rem; box-shadow: var(--shadow); }
+    .expense-visuals h3 { font-size: 1.1rem; color: var(--primary); margin-bottom: 1rem; }
+    .treemap-container { display: grid; gap: 4px; min-height: 300px; }
+    .treemap-item { padding: 0.75rem; border-radius: 8px; display: flex; flex-direction: column; justify-content: space-between; color: white; font-size: 0.8rem; min-height: 60px; cursor: pointer; transition: transform 0.2s; }
+    .treemap-item:hover { transform: scale(1.02); }
+    .treemap-label { font-weight: 500; }
+    .treemap-value { font-weight: 600; font-size: 0.9rem; }
+    .detail-list { max-height: 350px; overflow-y: auto; margin-top: 1rem; }
+    .detail-item { display: flex; justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px solid rgba(0,0,0,0.05); font-size: 0.85rem; }
+    .expense-total { margin-top: 1rem; padding-top: 1rem; border-top: 2px solid var(--accent); display: flex; justify-content: space-between; }
+    .total-label { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; }
+    .total-amount { font-size: 1.2rem; color: var(--accent); font-weight: 600; }
+    .upload-section { background: var(--card-bg); border-radius: 20px; padding: 1.5rem; box-shadow: var(--shadow); }
+    .upload-zone { border: 2px dashed rgba(0,0,0,0.1); border-radius: 16px; padding: 2.5rem; text-align: center; cursor: pointer; }
+    .upload-zone:hover { border-color: var(--accent); background: rgba(201,169,98,0.05); }
     .upload-icon { font-size: 3rem; margin-bottom: 1rem; opacity: 0.5; }
-    .upload-text { font-size: 0.9rem; color: var(--text-light); margin-bottom: 1rem; }
-    .upload-types { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
-    .upload-type-btn { padding: 0.5rem 1rem; border: 1px solid var(--accent); border-radius: 8px; background: transparent; color: var(--accent); font-family: inherit; font-size: 0.8rem; cursor: pointer; transition: all 0.2s ease; }
-    .upload-type-btn:hover, .upload-type-btn.active { background: var(--accent); color: white; }
-    #fileInput { display: none; }
-    .chat-toggle { position: fixed; bottom: 2rem; right: 2rem; width: 60px; height: 60px; border-radius: 50%; background: var(--primary); color: white; border: none; cursor: pointer; box-shadow: var(--shadow-lg); font-size: 1.5rem; display: flex; align-items: center; justify-content: center; z-index: 1000; transition: all 0.3s ease; }
-    .chat-toggle:hover { transform: scale(1.1); background: var(--primary-light); }
-    .chat-panel { position: fixed; bottom: 6rem; right: 2rem; width: 400px; max-width: calc(100vw - 2rem); height: 500px; max-height: calc(100vh - 8rem); background: var(--card-bg); backdrop-filter: blur(20px); border: 1px solid var(--glass-border); border-radius: 20px; box-shadow: var(--shadow-lg); display: none; flex-direction: column; z-index: 999; overflow: hidden; }
-    .chat-panel.active { display: flex; }
-    .chat-header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--glass-border); display: flex; justify-content: space-between; align-items: center; }
-    .chat-header h4 { font-family: 'Cormorant Garamond', serif; font-size: 1.1rem; color: var(--primary); }
-    .chat-close { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-light); }
-    .chat-messages { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
-    .chat-message { max-width: 85%; padding: 0.75rem 1rem; border-radius: 12px; font-size: 0.9rem; line-height: 1.5; }
-    .chat-message.user { background: var(--primary); color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
-    .chat-message.assistant { background: rgba(0, 0, 0, 0.05); align-self: flex-start; border-bottom-left-radius: 4px; }
-    .chat-input-area { padding: 1rem; border-top: 1px solid var(--glass-border); display: flex; gap: 0.5rem; }
-    .chat-input { flex: 1; padding: 0.75rem 1rem; border: 1px solid var(--glass-border); border-radius: 12px; font-family: inherit; font-size: 0.9rem; resize: none; }
-    .chat-input:focus { outline: none; border-color: var(--accent); }
-    .chat-send { padding: 0.75rem 1.25rem; background: var(--accent); color: white; border: none; border-radius: 12px; cursor: pointer; font-family: inherit; font-weight: 500; transition: all 0.2s ease; }
-    .chat-send:hover { background: var(--primary); }
-    .occupancy-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
-    .occupancy-item { text-align: center; padding: 1rem; background: rgba(0, 0, 0, 0.03); border-radius: 12px; }
-    .occupancy-value { font-family: 'Cormorant Garamond', serif; font-size: 1.75rem; font-weight: 500; color: var(--primary); }
-    .occupancy-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-light); margin-top: 0.25rem; }
-    .files-list { max-height: 200px; overflow-y: auto; }
-    .file-item { display: flex; justify-content: space-between; padding: 0.75rem 0; border-bottom: 1px solid rgba(0, 0, 0, 0.05); font-size: 0.85rem; }
-    .file-name { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; }
-    .file-date { color: var(--text-light); }
-    .loading { text-align: center; padding: 2rem; color: var(--text-light); }
-    .spinner { width: 40px; height: 40px; border: 3px solid var(--glass-border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @media (max-width: 768px) {
-      .header { padding: 1rem; }
-      .main-content { padding: 1rem; }
-      .kpi-value { font-size: 2rem; }
-      .occupancy-grid { grid-template-columns: repeat(2, 1fr); }
-      .chat-panel { right: 1rem; bottom: 5rem; width: calc(100vw - 2rem); }
-    }
-  </style>
-</head>
-<body>
-  <div class="login-container" id="loginContainer">
-    <div class="login-card">
-      <div class="login-logo">
-        <h1>Villa 8</h1>
-        <span>Amanyara</span>
-      </div>
-      <div class="error-message" id="loginError"></div>
-      <form id="loginForm">
-        <div class="form-group">
-          <label>Username</label>
-          <input type="text" id="username" value="admin" required>
-        </div>
-        <div class="form-group">
-          <label>Password</label>
-          <input type="password" id="password" required>
-        </div>
-        <button type="submit" class="btn btn-primary">Enter Dashboard</button>
-      </form>
-    </div>
-  </div>
-
-  <div class="dashboard" id="dashboard">
-    <header class="header">
-      <div class="header-brand">
-        <h1>Villa 8</h1>
-        <span>Amanyara · Turks & Caicos</span>
-      </div>
-      <div class="header-actions">
-        <button class="header-btn" onclick="document.getElementById('fileInput').click()">Upload Statement</button>
-        <button class="header-btn" onclick="logout()">Sign Out</button>
-      </div>
-    </header>
-
-    <main class="main-content">
-      <div class="kpi-grid">
-        <div class="kpi-card">
-          <div class="kpi-label">Current Balance</div>
-          <div class="kpi-value" id="kpiBalance">$--</div>
-          <div class="kpi-change" id="kpiBalanceChange">Loading...</div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-label">YTD Expenses</div>
-          <div class="kpi-value" id="kpiExpenses">$--</div>
-          <div class="kpi-change" id="kpiExpensesChange">Loading...</div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-label">Rental Revenue (Your 50%)</div>
-          <div class="kpi-value accent" id="kpiRevenue">$--</div>
-          <div class="kpi-change" id="kpiRevenueChange">Loading...</div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-label">YTD Occupancy</div>
-          <div class="kpi-value" id="kpiOccupancy">--%</div>
-          <div class="kpi-change" id="kpiOccupancyChange">Loading...</div>
-        </div>
-      </div>
-
-      <div class="upload-section">
-        <h3>Upload Documents</h3>
-        <div class="upload-zone" id="uploadZone">
-          <div class="upload-icon">📄</div>
-          <div class="upload-text">Drag & drop files here or click to browse</div>
-          <div class="upload-types">
-            <button class="upload-type-btn active" data-type="statement">Monthly Statement</button>
-            <button class="upload-type-btn" data-type="folio">Hotel Folio</button>
-          </div>
-          <input type="file" id="fileInput" accept=".pdf">
-        </div>
-      </div>
-
-      <div class="charts-grid">
-        <div class="chart-card">
-          <h3>Monthly Expenses Trend</h3>
-          <div class="chart-container"><canvas id="expenseChart"></canvas></div>
-        </div>
-        <div class="chart-card">
-          <h3>Expense Breakdown</h3>
-          <div class="expense-list" id="expenseList"><div class="loading"><div class="spinner"></div>Loading...</div></div>
-        </div>
-        <div class="chart-card">
-          <h3>Occupancy Overview</h3>
-          <div class="occupancy-grid">
-            <div class="occupancy-item"><div class="occupancy-value" id="ownerNights">--</div><div class="occupancy-label">Owner Nights</div></div>
-            <div class="occupancy-item"><div class="occupancy-value" id="guestNights">--</div><div class="occupancy-label">Guest Nights</div></div>
-            <div class="occupancy-item"><div class="occupancy-value" id="rentalNights">--</div><div class="occupancy-label">Rental Nights</div></div>
-            <div class="occupancy-item"><div class="occupancy-value" id="vacantNights">--</div><div class="occupancy-label">Vacant</div></div>
-          </div>
-        </div>
-        <div class="chart-card">
-          <h3>Utility Usage</h3>
-          <div class="chart-container"><canvas id="utilityChart"></canvas></div>
-        </div>
-      </div>
-
-      <div class="chart-card">
-        <h3>Recent Uploads</h3>
-        <div class="files-list" id="filesList"><div class="loading"><div class="spinner"></div>Loading...</div></div>
-      </div>
-    </main>
-
-    <button class="chat-toggle" id="chatToggle">💬</button>
-    <div class="chat-panel" id="chatPanel">
-      <div class="chat-header">
-        <h4>Villa Assistant</h4>
-        <button class="chat-close" onclick="toggleChat()">×</button>
-      </div>
-      <div class="chat-messages" id="chatMessages">
-        <div class="chat-message assistant">Hello! I'm your Villa 8 financial assistant. Ask me about expenses, occupancy, or any financial data.</div>
-      </div>
-      <div class="chat-input-area">
-        <textarea class="chat-input" id="chatInput" placeholder="Ask about your villa..." rows="1"></textarea>
-        <button class="chat-send" onclick="sendChat()">Send</button>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    let dashboardData = null;
-    let expenseChart = null;
-    let utilityChart = null;
-    let selectedFileType = 'statement';
-
-    async function checkAuth() {
-      try {
-        const res = await fetch('/api/auth/status');
-        const data = await res.json();
-        if (data.authenticated) {
-          showDashboard();
-          loadDashboard();
-        }
-      } catch (err) {
-        console.error('Auth check failed:', err);
-      }
-    }
-
-    document.getElementById('loginForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const username = document.getElementById('username').value;
-      const password = document.getElementById('password').value;
-      const errorEl = document.getElementById('loginError');
-
-      try {
-        const res = await fetch('/api/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password })
-        });
-        const data = await res.json();
-        if (data.success) {
-          errorEl.style.display = 'none';
-          showDashboard();
-          loadDashboard();
-        } else {
-          errorEl.textContent = data.error || 'Login failed';
-          errorEl.style.display = 'block';
-        }
-      } catch (err) {
-        errorEl.textContent = 'Connection error';
-        errorEl.style.display = 'block';
-      }
-    });
-
-    async function logout() {
-      await fetch('/api/logout', { method: 'POST' });
-      document.getElementById('loginContainer').classList.remove('hidden');
-      document.getElementById('dashboard').classList.remove('active');
-    }
-
-    function showDashboard() {
-      document.getElementById('loginContainer').classList.add('hidden');
-      document.getElementById('dashboard').classList.add('active');
-    }
-
-    async function loadDashboard() {
-      try {
-        const res = await fetch('/api/dashboard');
-        dashboardData = await res.json();
-        updateKPIs();
-        updateExpenseList();
-        updateOccupancy();
-        updateCharts();
-        updateFilesList();
-      } catch (err) {
-        console.error('Failed to load dashboard:', err);
-      }
-    }
-
-    function formatCurrency(num) {
-      if (!num && num !== 0) return '$--';
-      return '$' + Number(num).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
-
-    function updateKPIs() {
-      const latest = dashboardData.statements[0];
-      const ytd = dashboardData.ytdSummary;
-
-      if (latest) {
-        document.getElementById('kpiBalance').textContent = formatCurrency(latest.closing_balance);
-        const date = new Date(latest.statement_date);
-        document.getElementById('kpiBalanceChange').textContent = 'As of ' + date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-      }
-
-      if (ytd) {
-        const totalExpenses = dashboardData.expenseTrends
-          .filter(t => t.year === new Date().getFullYear())
-          .reduce((sum, t) => sum + parseFloat(t.total_expenses || 0), 0);
-
-        document.getElementById('kpiExpenses').textContent = formatCurrency(totalExpenses);
-        document.getElementById('kpiExpensesChange').textContent = 'Year to date';
-        document.getElementById('kpiRevenue').textContent = formatCurrency(ytd.total_owner_revenue);
-        document.getElementById('kpiRevenueChange').textContent = 'Your 50% share YTD';
-
-        const totalNights = (parseInt(ytd.total_owner_nights) || 0) + (parseInt(ytd.total_guest_nights) || 0) + (parseInt(ytd.total_rental_nights) || 0) + (parseInt(ytd.total_vacant_nights) || 0);
-        const occupiedNights = totalNights - (parseInt(ytd.total_vacant_nights) || 0);
-        const occupancyRate = totalNights > 0 ? ((occupiedNights / totalNights) * 100).toFixed(0) : 0;
-
-        document.getElementById('kpiOccupancy').textContent = occupancyRate + '%';
-        document.getElementById('kpiOccupancyChange').textContent = occupiedNights + ' of ' + totalNights + ' nights occupied';
-      }
-    }
-
-    function updateExpenseList() {
-      const container = document.getElementById('expenseList');
-      const expenses = dashboardData.latestExpenses;
-
-      if (!expenses || expenses.length === 0) {
-        container.innerHTML = '<div class="loading">No expense data. Upload a statement to get started.</div>';
-        return;
-      }
-
-      container.innerHTML = expenses.map(function(exp) {
-        return '<div class="expense-item"><div><div class="expense-category">' + exp.category + '</div><div class="expense-subcategory">' + (exp.subcategory || '') + '</div></div><div class="expense-amount">' + formatCurrency(exp.total) + '</div></div>';
-      }).join('');
-    }
-
-    function updateOccupancy() {
-      const latest = dashboardData.statements[0];
-      if (latest) {
-        document.getElementById('ownerNights').textContent = latest.owner_nights || 0;
-        document.getElementById('guestNights').textContent = latest.guest_nights || 0;
-        document.getElementById('rentalNights').textContent = latest.rental_nights || 0;
-        document.getElementById('vacantNights').textContent = latest.vacant_nights || 0;
-      }
-    }
-
-    function updateCharts() {
-      const trends = dashboardData.expenseTrends || [];
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const labels = trends.map(function(t) { return months[t.month - 1] + ' ' + t.year; });
-      const values = trends.map(function(t) { return parseFloat(t.total_expenses) || 0; });
-
-      const ctx1 = document.getElementById('expenseChart').getContext('2d');
-      if (expenseChart) expenseChart.destroy();
-
-      expenseChart = new Chart(ctx1, {
-        type: 'line',
-        data: {
-          labels: labels,
-          datasets: [{
-            label: 'Monthly Expenses',
-            data: values,
-            borderColor: '#1a3a4a',
-            backgroundColor: 'rgba(26, 58, 74, 0.1)',
-            fill: true,
-            tension: 0.4,
-            pointBackgroundColor: '#c9a962',
-            pointBorderColor: '#c9a962',
-            pointRadius: 4
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
-          scales: { y: { beginAtZero: true, ticks: { callback: function(val) { return '$' + val.toLocaleString(); } } } }
-        }
-      });
-
-      const utilities = dashboardData.latestUtilities || [];
-      const ctx2 = document.getElementById('utilityChart').getContext('2d');
-      if (utilityChart) utilityChart.destroy();
-
-      if (utilities.length > 0) {
-        utilityChart = new Chart(ctx2, {
-          type: 'bar',
-          data: {
-            labels: utilities.map(function(u) { return u.utility_type; }),
-            datasets: [{
-              label: 'Cost ($)',
-              data: utilities.map(function(u) { return parseFloat(u.cost) || 0; }),
-              backgroundColor: ['#1a3a4a', '#c9a962'],
-              borderRadius: 8
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true, ticks: { callback: function(val) { return '$' + val.toLocaleString(); } } } }
-          }
-        });
-      }
-    }
-
-    function updateFilesList() {
-      const container = document.getElementById('filesList');
-      const files = dashboardData.recentFiles || [];
-
-      if (files.length === 0) {
-        container.innerHTML = '<div class="loading">No files uploaded yet.</div>';
-        return;
-      }
-
-      container.innerHTML = files.map(function(f) {
-        return '<div class="file-item"><span class="file-name">' + f.filename + '</span><span class="file-date">' + new Date(f.upload_date).toLocaleDateString() + '</span></div>';
-      }).join('');
-    }
-
-    // File Upload
-    const uploadZone = document.getElementById('uploadZone');
-    const fileInput = document.getElementById('fileInput');
-
-    document.querySelectorAll('.upload-type-btn').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        document.querySelectorAll('.upload-type-btn').forEach(function(b) { b.classList.remove('active'); });
-        btn.classList.add('active');
-        selectedFileType = btn.dataset.type;
-      });
-    });
-
-    uploadZone.addEventListener('click', function() { fileInput.click(); });
-    uploadZone.addEventListener('dragover', function(e) { e.preventDefault(); uploadZone.classList.add('dragover'); });
-    uploadZone.addEventListener('dragleave', function() { uploadZone.classList.remove('dragover'); });
-    uploadZone.addEventListener('drop', function(e) {
-      e.preventDefault();
-      uploadZone.classList.remove('dragover');
-      if (e.dataTransfer.files.length > 0) uploadFile(e.dataTransfer.files[0]);
-    });
-
-    fileInput.addEventListener('change', function() {
-      if (fileInput.files.length > 0) uploadFile(fileInput.files[0]);
-    });
-
-    async function uploadFile(file) {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('fileType', selectedFileType);
-
-      uploadZone.innerHTML = '<div class="loading"><div class="spinner"></div>Processing...</div>';
-
-      try {
-        const res = await fetch('/api/upload', { method: 'POST', body: formData });
-        const data = await res.json();
-
-        if (data.success) {
-          uploadZone.innerHTML = '<div class="upload-icon">✓</div><div class="upload-text">File processed successfully!</div>';
-          loadDashboard();
-        } else {
-          throw new Error(data.error);
-        }
-      } catch (err) {
-        uploadZone.innerHTML = '<div class="upload-icon">❌</div><div class="upload-text">Error: ' + err.message + '</div>';
-      }
-
-      setTimeout(function() {
-        uploadZone.innerHTML = '<div class="upload-icon">📄</div><div class="upload-text">Drag & drop files here or click to browse</div><div class="upload-types"><button class="upload-type-btn active" data-type="statement">Monthly Statement</button><button class="upload-type-btn" data-type="folio">Hotel Folio</button></div>';
-        document.querySelectorAll('.upload-type-btn').forEach(function(btn) {
-          btn.addEventListener('click', function() {
-            document.querySelectorAll('.upload-type-btn').forEach(function(b) { b.classList.remove('active'); });
-            btn.classList.add('active');
-            selectedFileType = btn.dataset.type;
-          });
-        });
-      }, 3000);
-    }
-
-    // Chat
-    document.getElementById('chatToggle').addEventListener('click', toggleChat);
-
-    function toggleChat() {
-      document.getElementById('chatPanel').classList.toggle('active');
-    }
-
-    document.getElementById('chatInput').addEventListener('keydown', function(e) {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendChat();
-      }
-    });
-
-    async function sendChat() {
-      const input = document.getElementById('chatInput');
-      const message = input.value.trim();
-      if (!message) return;
-
-      const messages = document.getElementById('chatMessages');
-      messages.innerHTML += '<div class="chat-message user">' + escapeHtml(message) + '</div>';
-      input.value = '';
-      messages.scrollTop = messages.scrollHeight;
-
-      const loadingId = 'loading-' + Date.now();
-      messages.innerHTML += '<div class="chat-message assistant" id="' + loadingId + '">Thinking...</div>';
-      messages.scrollTop = messages.scrollHeight;
-
-      try {
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: message })
-        });
-        const data = await res.json();
-        document.getElementById(loadingId).textContent = data.response || data.error || 'No response';
-      } catch (err) {
-        document.getElementById(loadingId).textContent = 'Error: ' + err.message;
-      }
-      messages.scrollTop = messages.scrollHeight;
-    }
-
-    function escapeHtml(text) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
-    }
-
-    checkAuth();
-  </script>
-</body>
-</html>
+    .upload-text { color: var(--text-light); margin-bot
