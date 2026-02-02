@@ -281,7 +281,7 @@ app.get('/api/auth/status', (req, res) => {
 
 app.get('/api/statements', requireAuth, async (req, res) => {
   try {
-    const result = await pool.query(`SELECT id, year, month, closing_balance, owner_nights, guest_nights, rental_nights, vacant_nights, owner_revenue_share, total_expenses FROM monthly_statements ORDER BY year DESC, month DESC`);
+    const result = await pool.query(`SELECT id, year, month, closing_balance, owner_nights, guest_nights, rental_nights, vacant_nights, owner_revenue_share, gross_revenue, total_expenses FROM monthly_statements ORDER BY year DESC, month DESC`);
     const years = [...new Set(result.rows.map(s => s.year))].sort((a,b) => b - a);
     res.json({ statements: result.rows, availableYears: years });
   } catch (err) { res.status(500).json({ error: 'Failed to fetch statements' }); }
@@ -382,12 +382,28 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
     const occupiedNights = totals.totalOwnerNights + totals.totalGuestNights + totals.totalRentalNights;
     const totalNightsInPeriod = occupiedNights + totals.totalVacantNights;
     
+    // Calculate ADR (Average Daily Rate) from gross revenue / rental nights
+    let totalGrossRevenue = 0;
+    let totalRentalNightsForADR = 0;
+    for (const s of statements.rows) {
+      const grossRev = parseFloat(s.gross_revenue) || 0;
+      const rentalN = parseInt(s.rental_nights) || 0;
+      if (grossRev > 0 && rentalN > 0) {
+        totalGrossRevenue += grossRev;
+        totalRentalNightsForADR += rentalN;
+      }
+    }
+    const averageDailyRate = totalRentalNightsForADR > 0 ? totalGrossRevenue / totalRentalNightsForADR : 0;
+    
     const insights = {
       occupiedNights,
       vacantNights: totals.totalVacantNights,
       costPerOccupiedNight: occupiedNights > 0 ? totals.totalExpenses / occupiedNights : 0,
       occupancyRate: totalNightsInPeriod > 0 ? (occupiedNights / totalNightsInPeriod * 100) : 0,
-      netIncome: totals.totalRevenue - totals.totalExpenses
+      netIncome: totals.totalRevenue - totals.totalExpenses,
+      averageDailyRate,
+      totalGrossRevenue,
+      totalRentalNights: totalRentalNightsForADR
     };
     
     const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -458,18 +474,18 @@ app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => 
     const savedMonths = [];
     for (const monthData of monthlyData) {
       const stmtResult = await pool.query(`
-        INSERT INTO monthly_statements (statement_date, year, month, owner_nights, guest_nights, rental_nights, vacant_nights, owner_revenue_share, total_expenses, raw_data)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        INSERT INTO monthly_statements (statement_date, year, month, owner_nights, guest_nights, rental_nights, vacant_nights, owner_revenue_share, gross_revenue, total_expenses, raw_data)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         ON CONFLICT (year, month) DO UPDATE SET 
           owner_nights=EXCLUDED.owner_nights, guest_nights=EXCLUDED.guest_nights, 
           rental_nights=EXCLUDED.rental_nights, vacant_nights=EXCLUDED.vacant_nights, 
-          owner_revenue_share=EXCLUDED.owner_revenue_share, total_expenses=EXCLUDED.total_expenses,
-          raw_data=EXCLUDED.raw_data
+          owner_revenue_share=EXCLUDED.owner_revenue_share, gross_revenue=EXCLUDED.gross_revenue,
+          total_expenses=EXCLUDED.total_expenses, raw_data=EXCLUDED.raw_data
         RETURNING id
       `, [monthData.statementDate, monthData.year, monthData.month, 
           monthData.occupancy.ownerNights, monthData.occupancy.guestNights, 
           monthData.occupancy.rentalNights, monthData.occupancy.vacantNights, 
-          monthData.ownerRevenueShare, monthData.totalExpenses, 
+          monthData.ownerRevenueShare, monthData.grossRevenue, monthData.totalExpenses, 
           { parsed: monthData }]);
       
       const stmtId = stmtResult.rows[0].id;
