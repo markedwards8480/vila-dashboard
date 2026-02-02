@@ -6,7 +6,6 @@ const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
 const pdfParse = require('pdf-parse');
 const path = require('path');
-const fs = require('fs');
 const Anthropic = require('@anthropic-ai/sdk');
 
 const app = express();
@@ -26,7 +25,6 @@ const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic({
 // Middleware
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-// Trust proxy for Railway
 app.set('trust proxy', 1);
 
 app.use(session({
@@ -46,10 +44,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // File upload configuration
 const storage = multer.memoryStorage();
-const upload = multer({ 
-  storage,
-  limits: { fileSize: 50 * 1024 * 1024 }
-});
+const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } });
 
 // Initialize database
 async function initDatabase() {
@@ -58,26 +53,24 @@ async function initDatabase() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
-        username VARCHAR(255) UNIQUE NOT NULL,
+        username VARCHAR(50) UNIQUE NOT NULL,
         password_hash VARCHAR(255) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
       
       CREATE TABLE IF NOT EXISTS monthly_statements (
         id SERIAL PRIMARY KEY,
-        statement_date DATE NOT NULL,
+        statement_date DATE,
         year INTEGER NOT NULL,
         month INTEGER NOT NULL,
         opening_balance DECIMAL(12,2),
         closing_balance DECIMAL(12,2),
-        total_charges DECIMAL(12,2),
-        total_payments DECIMAL(12,2),
         owner_nights INTEGER DEFAULT 0,
         guest_nights INTEGER DEFAULT 0,
         rental_nights INTEGER DEFAULT 0,
         vacant_nights INTEGER DEFAULT 0,
-        rental_revenue DECIMAL(12,2) DEFAULT 0,
-        owner_revenue_share DECIMAL(12,2) DEFAULT 0,
+        rental_revenue DECIMAL(12,2),
+        owner_revenue_share DECIMAL(12,2),
         raw_data JSONB,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(year, month)
@@ -86,8 +79,8 @@ async function initDatabase() {
       CREATE TABLE IF NOT EXISTS expense_categories (
         id SERIAL PRIMARY KEY,
         statement_id INTEGER REFERENCES monthly_statements(id) ON DELETE CASCADE,
-        category VARCHAR(255) NOT NULL,
-        subcategory VARCHAR(255),
+        category VARCHAR(100) NOT NULL,
+        subcategory VARCHAR(100),
         amount DECIMAL(12,2) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -159,15 +152,14 @@ async function initDatabase() {
     
     const defaultPassword = process.env.DEFAULT_PASSWORD || 'villa2025';
     const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+    
     await client.query(`
-      INSERT INTO users (username, password_hash)
-      VALUES ('admin', $1)
+      INSERT INTO users (username, password_hash) 
+      VALUES ('admin', $1) 
       ON CONFLICT (username) DO NOTHING
     `, [hashedPassword]);
     
-    console.log('Database initialized successfully');
-  } catch (err) {
-    console.error('Database initialization error:', err);
+    console.log('Database initialized');
   } finally {
     client.release();
   }
@@ -178,11 +170,11 @@ function requireAuth(req, res, next) {
   if (req.session && req.session.userId) {
     next();
   } else {
-    res.status(401).json({ error: 'Authentication required' });
+    res.status(401).json({ error: 'Unauthorized' });
   }
 }
 
-// Helper function to clean numbers from PDF (handles "124,206.05" or "124,206.05$")
+// Helper function to clean numbers from PDF
 function cleanNumber(str) {
   if (!str) return 0;
   const cleaned = str.replace(/\$/g, '').replace(/\s+/g, '').replace(/,/g, '');
@@ -204,7 +196,7 @@ function parseOccDate(dateStr, year) {
   return null;
 }
 
-// Parse monthly statement PDF - Amanyara specific format
+// Parse monthly statement PDF
 async function parseMonthlyStatement(buffer, filename) {
   const data = await pdfParse(buffer);
   const text = data.text;
@@ -218,86 +210,56 @@ async function parseMonthlyStatement(buffer, filename) {
     month: null,
     openingBalance: null,
     closingBalance: null,
-    occupancy: {
-      ownerNights: 0,
-      guestNights: 0,
-      rentalNights: 0,
-      vacantNights: 0
-    },
+    occupancy: { ownerNights: 0, guestNights: 0, rentalNights: 0, vacantNights: 0 },
     expenses: [],
     utilities: [],
     rentalRevenue: 0,
     ownerRevenueShare: 0,
     totalExpenses: 0,
+    occupancyDetails: [],
     rawText: text
   };
   
-  // Parse date from filename - format: Villa_08_-November_Statement_2025.pdf
+  // Parse date from filename
   const dateMatch = filename.match(/(\w+)[\s_-]*Statement[\s_-]*(\d{4})/i);
   if (dateMatch) {
-    const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 
-                        'july', 'august', 'september', 'october', 'november', 'december'];
+    const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
     const monthIdx = monthNames.findIndex(m => m.startsWith(dateMatch[1].toLowerCase()));
     if (monthIdx !== -1) {
       result.month = monthIdx + 1;
       result.year = parseInt(dateMatch[2]);
       result.statementDate = new Date(result.year, result.month - 1, 1);
-      console.log('Parsed date:', result.month, result.year);
     }
   }
   
-  // Parse closing balance - format: "124,206.05$" followed by newline then "Beginning Balance"
+  // Parse closing balance
   const balanceMatch = text.match(/(\d{1,3}(?:,\d{3})*\.\d{2})\$\s+\n.*Beginning Balance/);
   if (balanceMatch) {
     result.closingBalance = cleanNumber(balanceMatch[1]);
-    console.log('Closing balance:', result.closingBalance);
   }
   
-  // Parse occupancy - format: "Villa Owner Usage41919.00" or "Vacant26234234.00"
-  // First number is current month, followed by YTD (may be concatenated)
-  // "Vacant26234" -> current=26, ytd=234
+  // Parse occupancy
   const vacantMatch = text.match(/Vacant\s*(\d{1,2})(\d{2,3})(?:\d|\.)/);
-  if (vacantMatch) {
-    result.occupancy.vacantNights = parseInt(vacantMatch[1]);
-    console.log('Vacant nights:', result.occupancy.vacantNights);
-  }
+  if (vacantMatch) result.occupancy.vacantNights = parseInt(vacantMatch[1]);
   
-  // Owner nights - "Villa Owner Usage419" -> current=4, ytd=19
   const ownerMatch = text.match(/Villa Owner Usage\s*(\d)(\d{1,2})(?:\d|\.)/);
-  if (ownerMatch) {
-    result.occupancy.ownerNights = parseInt(ownerMatch[1]);
-    console.log('Owner nights:', result.occupancy.ownerNights);
-  }
+  if (ownerMatch) result.occupancy.ownerNights = parseInt(ownerMatch[1]);
   
-  // Guest nights - "Villa Owner Guest Usage041" -> current=0, ytd=41
   const guestMatch = text.match(/Villa Owner Guest Usage\s*(\d)(\d{1,2})(?:\d|\.)/);
-  if (guestMatch) {
-    result.occupancy.guestNights = parseInt(guestMatch[1]);
-    console.log('Guest nights:', result.occupancy.guestNights);
-  }
+  if (guestMatch) result.occupancy.guestNights = parseInt(guestMatch[1]);
   
-  // Rental nights - "Villa Rental040" -> current=0, ytd=40
   const rentalMatch = text.match(/Villa Rental\s*(\d)(\d{1,2})(?:\d|\.)/);
-  if (rentalMatch) {
-    result.occupancy.rentalNights = parseInt(rentalMatch[1]);
-    console.log('Rental nights:', result.occupancy.rentalNights);
-  }
+  if (rentalMatch) result.occupancy.rentalNights = parseInt(rentalMatch[1]);
   
-  // Parse 50% Owner Revenue - "50% OWNER REVENUE-205,349.98"
+  // Parse revenue
   const revenueMatch = text.match(/50% OWNER REVENUE\s*-?\s*([\d,]+\.?\d*)/i);
-  if (revenueMatch) {
-    result.ownerRevenueShare = cleanNumber(revenueMatch[1]);
-    console.log('Owner revenue share:', result.ownerRevenueShare);
-  }
+  if (revenueMatch) result.ownerRevenueShare = cleanNumber(revenueMatch[1]);
   
-  // Parse Total Expenses - "TOTAL EXPENSES40,366.98"
+  // Parse total expenses
   const totalExpMatch = text.match(/TOTAL EXPENSES\s*([\d,]+\.\d{2})/i);
-  if (totalExpMatch) {
-    result.totalExpenses = cleanNumber(totalExpMatch[1]);
-    console.log('Total expenses:', result.totalExpenses);
-  }
+  if (totalExpMatch) result.totalExpenses = cleanNumber(totalExpMatch[1]);
   
-  // Parse individual expenses - format: "Contract Services6,100.00"
+  // Parse individual expenses
   const expensePatterns = [
     { regex: /Contract Services\s*([\d,]+\.\d{2})/i, category: 'Maintenance', subcategory: 'Contract Services' },
     { regex: /Electricity\s*([\d,]+\.\d{2})/i, category: 'Utilities', subcategory: 'Electricity' },
@@ -319,10 +281,7 @@ async function parseMonthlyStatement(buffer, filename) {
     const match = text.match(regex);
     if (match) {
       const amount = cleanNumber(match[1]);
-      if (amount > 0) {
-        result.expenses.push({ category, subcategory, amount });
-        console.log('Expense:', subcategory, amount);
-      }
+      if (amount > 0) result.expenses.push({ category, subcategory, amount });
     }
   }
   
@@ -331,28 +290,13 @@ async function parseMonthlyStatement(buffer, filename) {
   const waterMatch = text.match(/Water\s*([\d,]+\.\d{2})/i);
   
   if (electricityMatch) {
-    result.utilities.push({
-      type: 'Electricity',
-      consumption: 0,
-      cost: cleanNumber(electricityMatch[1]),
-      unit: 'KWH'
-    });
+    result.utilities.push({ type: 'Electricity', consumption: 0, cost: cleanNumber(electricityMatch[1]), unit: 'KWH' });
   }
-  
   if (waterMatch) {
-    result.utilities.push({
-      type: 'Water',
-      consumption: 0,
-      cost: cleanNumber(waterMatch[1]),
-      unit: 'Gallons'
-    });
+    result.utilities.push({ type: 'Water', consumption: 0, cost: cleanNumber(waterMatch[1]), unit: 'Gallons' });
   }
   
-  // Parse detailed occupancy from page 3 (Activity calendar)
-  // Format: "Vacant VA 01-Nov-25 19-Nov-25 1 8 - - - - 1 8"
-  // or "Villa Owner VO 19-Nov-25 23-Nov-25 4 4 - - - -"
-  result.occupancyDetails = [];
-  
+  // Parse detailed occupancy
   const activityPatterns = [
     { pattern: /Vacant\s+VA\s+(\d{1,2}-\w{3}-\d{2})\s+(\d{1,2}-\w{3}-\d{2})\s+(\d+)/gi, type: 'Vacant' },
     { pattern: /Villa Owner\s+VO\s+(\d{1,2}-\w{3}-\d{2})\s+(\d{1,2}-\w{3}-\d{2})\s+(\d+)/gi, type: 'Owner' },
@@ -364,32 +308,14 @@ async function parseMonthlyStatement(buffer, filename) {
     let match;
     pattern.lastIndex = 0;
     while ((match = pattern.exec(text)) !== null) {
-      const checkIn = match[1];
-      const checkOut = match[2];
       const nights = parseInt(match[3]) || 0;
       if (nights > 0) {
-        result.occupancyDetails.push({
-          type,
-          checkIn,
-          checkOut,
-          nights
-        });
-        console.log('Occupancy detail:', type, checkIn, '-', checkOut, nights, 'nights');
+        result.occupancyDetails.push({ type, checkIn: match[1], checkOut: match[2], nights });
       }
     }
   }
   
   console.log('=== PARSING COMPLETE ===');
-  console.log('Result summary:', {
-    date: result.statementDate,
-    balance: result.closingBalance,
-    occupancy: result.occupancy,
-    totalExpenses: result.totalExpenses,
-    expenseCount: result.expenses.length,
-    ownerRevenue: result.ownerRevenueShare,
-    occupancyDetailsCount: result.occupancyDetails.length
-  });
-  
   return result;
 }
 
@@ -408,32 +334,12 @@ async function parseHotelFolio(buffer, filename) {
   };
   
   const nameMatch = text.match(/Mr\.\s+(\w+\s+\w+)/i) || text.match(/Mrs\.\s+(\w+\s+\w+)/i);
-  if (nameMatch) {
-    result.guestName = nameMatch[1];
-  }
+  if (nameMatch) result.guestName = nameMatch[1];
   
   const arrivalMatch = text.match(/Arrival\s*:?\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
   const departureMatch = text.match(/Departure\s*:?\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
   if (arrivalMatch) result.arrivalDate = arrivalMatch[1];
   if (departureMatch) result.departureDate = departureMatch[1];
-  
-  const linePatterns = [
-    { pattern: /Transportation\s+([\d,]+\.?\d*)/gi, category: 'Transportation' },
-    { pattern: /Villa Owner Private Bar\s+([\d,]+\.?\d*)/gi, category: 'Bar' },
-    { pattern: /Tax - Government\s+([\d,]+\.?\d*)/gi, category: 'Tax' },
-    { pattern: /Spa.*?\s+([\d,]+\.?\d*)/gi, category: 'Spa' },
-    { pattern: /Private Dining.*Food\s+([\d,]+\.?\d*)/gi, category: 'Dining' },
-    { pattern: /Villa Owner Groceries\s+([\d,]+\.?\d*)/gi, category: 'Groceries' }
-  ];
-  
-  for (const { pattern, category } of linePatterns) {
-    let match;
-    while ((match = pattern.exec(text)) !== null) {
-      const amount = parseFloat(match[1].replace(/,/g, ''));
-      result.lineItems.push({ category, amount, description: match[0].trim() });
-      result.totalCharges += amount;
-    }
-  }
   
   return result;
 }
@@ -443,24 +349,18 @@ async function parseHotelFolio(buffer, filename) {
 // Login
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
-  
   try {
     const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
-    
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    
     const user = result.rows[0];
     const validPassword = await bcrypt.compare(password, user.password_hash);
-    
     if (!validPassword) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    
     req.session.userId = user.id;
     req.session.username = user.username;
-    
     res.json({ success: true, username: user.username });
   } catch (err) {
     console.error('Login error:', err);
@@ -486,19 +386,15 @@ app.get('/api/auth/status', (req, res) => {
 // Change password
 app.post('/api/change-password', requireAuth, async (req, res) => {
   const { currentPassword, newPassword } = req.body;
-  
   try {
     const result = await pool.query('SELECT * FROM users WHERE id = $1', [req.session.userId]);
     const user = result.rows[0];
-    
     const validPassword = await bcrypt.compare(currentPassword, user.password_hash);
     if (!validPassword) {
       return res.status(401).json({ error: 'Current password is incorrect' });
     }
-    
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hashedPassword, req.session.userId]);
-    
     res.json({ success: true });
   } catch (err) {
     console.error('Password change error:', err);
@@ -560,7 +456,6 @@ app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => 
         const statementId = statementResult.rows[0].id;
         
         await pool.query('DELETE FROM expense_categories WHERE statement_id = $1', [statementId]);
-        
         for (const expense of parseResult.expenses) {
           await pool.query(
             'INSERT INTO expense_categories (statement_id, category, subcategory, amount) VALUES ($1, $2, $3, $4)',
@@ -569,7 +464,6 @@ app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => 
         }
         
         await pool.query('DELETE FROM utility_readings WHERE statement_id = $1', [statementId]);
-        
         for (const utility of parseResult.utilities) {
           await pool.query(
             'INSERT INTO utility_readings (statement_id, utility_type, consumption, cost, unit) VALUES ($1, $2, $3, $4, $5)',
@@ -577,9 +471,7 @@ app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => 
           );
         }
         
-        // Save occupancy details
         await pool.query('DELETE FROM occupancy_details WHERE statement_id = $1', [statementId]);
-        
         for (const occ of (parseResult.occupancyDetails || [])) {
           await pool.query(
             'INSERT INTO occupancy_details (statement_id, activity_type, check_in, check_out, num_nights, owner_nights, guest_nights, rental_nights, vacant_nights) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
@@ -607,7 +499,6 @@ app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => 
       `, [parseResult.guestName, parseResult.totalCharges, { text: parseResult.rawText }]);
       
       const folioId = folioResult.rows[0].id;
-      
       for (const item of parseResult.lineItems) {
         await pool.query(
           'INSERT INTO folio_line_items (folio_id, description, category, amount) VALUES ($1, $2, $3, $4)',
@@ -617,7 +508,6 @@ app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => 
     }
     
     await pool.query('UPDATE uploaded_files SET processed = true WHERE id = $1', [uploadId]);
-    
     res.json({ success: true, parsed: parseResult });
   } catch (err) {
     console.error('Upload processing error:', err);
@@ -628,28 +518,18 @@ app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => 
 // Get dashboard data
 app.get('/api/dashboard', requireAuth, async (req, res) => {
   try {
-    const statements = await pool.query(`
-      SELECT * FROM monthly_statements 
-      ORDER BY year DESC, month DESC
-    `);
+    const statements = await pool.query('SELECT * FROM monthly_statements ORDER BY year DESC, month DESC');
     
     let expenses = [];
     let utilities = [];
     if (statements.rows.length > 0) {
       const latestId = statements.rows[0].id;
-      
-      const expenseResult = await pool.query(`
-        SELECT category, subcategory, SUM(amount) as total
-        FROM expense_categories 
-        WHERE statement_id = $1
-        GROUP BY category, subcategory
-        ORDER BY total DESC
-      `, [latestId]);
+      const expenseResult = await pool.query(
+        'SELECT category, subcategory, SUM(amount) as total FROM expense_categories WHERE statement_id = $1 GROUP BY category, subcategory ORDER BY total DESC',
+        [latestId]
+      );
       expenses = expenseResult.rows;
-      
-      const utilityResult = await pool.query(`
-        SELECT * FROM utility_readings WHERE statement_id = $1
-      `, [latestId]);
+      const utilityResult = await pool.query('SELECT * FROM utility_readings WHERE statement_id = $1', [latestId]);
       utilities = utilityResult.rows;
     }
     
@@ -663,14 +543,11 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
         SUM(vacant_nights) as total_vacant_nights,
         SUM(rental_revenue) as total_rental_revenue,
         SUM(owner_revenue_share) as total_owner_revenue
-      FROM monthly_statements
-      WHERE year = $1
+      FROM monthly_statements WHERE year = $1
     `, [currentYear]);
     
     const trendResult = await pool.query(`
-      SELECT 
-        ms.year, ms.month,
-        SUM(ec.amount) as total_expenses
+      SELECT ms.year, ms.month, SUM(ec.amount) as total_expenses
       FROM monthly_statements ms
       LEFT JOIN expense_categories ec ON ms.id = ec.statement_id
       WHERE ms.year >= $1 - 1
@@ -678,9 +555,7 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
       ORDER BY ms.year, ms.month
     `, [currentYear]);
     
-    const filesResult = await pool.query(`
-      SELECT * FROM uploaded_files ORDER BY upload_date DESC LIMIT 20
-    `);
+    const filesResult = await pool.query('SELECT * FROM uploaded_files ORDER BY upload_date DESC LIMIT 20');
     
     res.json({
       statements: statements.rows,
@@ -701,41 +576,21 @@ app.get('/api/statement/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     
-    const statementResult = await pool.query(
-      'SELECT * FROM monthly_statements WHERE id = $1',
-      [id]
-    );
-    
+    const statementResult = await pool.query('SELECT * FROM monthly_statements WHERE id = $1', [id]);
     if (statementResult.rows.length === 0) {
       return res.status(404).json({ error: 'Statement not found' });
     }
     
     const statement = statementResult.rows[0];
-    
-    // Get all expenses for this statement
-    const expenseResult = await pool.query(`
-      SELECT category, subcategory, amount
-      FROM expense_categories 
-      WHERE statement_id = $1
-      ORDER BY category, amount DESC
-    `, [id]);
-    
-    // Get expenses grouped by category
-    const categoryResult = await pool.query(`
-      SELECT category, SUM(amount) as total
-      FROM expense_categories 
-      WHERE statement_id = $1
-      GROUP BY category
-      ORDER BY total DESC
-    `, [id]);
-    
-    // Get utilities
-    const utilityResult = await pool.query(
-      'SELECT * FROM utility_readings WHERE statement_id = $1',
+    const expenseResult = await pool.query(
+      'SELECT category, subcategory, amount FROM expense_categories WHERE statement_id = $1 ORDER BY category, amount DESC',
       [id]
     );
-    
-    // Get occupancy details
+    const categoryResult = await pool.query(
+      'SELECT category, SUM(amount) as total FROM expense_categories WHERE statement_id = $1 GROUP BY category ORDER BY total DESC',
+      [id]
+    );
+    const utilityResult = await pool.query('SELECT * FROM utility_readings WHERE statement_id = $1', [id]);
     const occupancyResult = await pool.query(
       'SELECT * FROM occupancy_details WHERE statement_id = $1 ORDER BY check_in',
       [id]
@@ -768,35 +623,28 @@ app.post('/api/chat', requireAuth, async (req, res) => {
       [req.session.userId, 'user', message]
     );
     
-    const statements = await pool.query(`
-      SELECT year, month, closing_balance, owner_nights, guest_nights, rental_nights, 
-             vacant_nights, rental_revenue, owner_revenue_share
-      FROM monthly_statements 
-      ORDER BY year DESC, month DESC 
-      LIMIT 12
-    `);
-    
+    const statements = await pool.query('SELECT * FROM monthly_statements ORDER BY year DESC, month DESC LIMIT 12');
     const expenses = await pool.query(`
       SELECT ec.category, ec.subcategory, ec.amount, ms.year, ms.month
       FROM expense_categories ec
       JOIN monthly_statements ms ON ec.statement_id = ms.id
       ORDER BY ms.year DESC, ms.month DESC
-      LIMIT 50
+      LIMIT 100
     `);
     
-    const systemPrompt = 'You are a helpful financial assistant for Villa 8 at Amanyara Resort in Turks & Caicos. ' +
-      'You have access to the villa financial data including monthly statements, expenses, occupancy, and utility usage.\n\n' +
-      'Here is the recent financial data:\n\nMonthly Statements (most recent 12 months):\n' +
-      JSON.stringify(statements.rows, null, 2) + '\n\nRecent Expenses:\n' +
-      JSON.stringify(expenses.rows, null, 2) + '\n\n' +
-      'Help the owner understand their villa expenses, occupancy patterns, and financial performance. ' +
-      'Provide specific numbers when available. Be concise but thorough.';
-    
+    const context = `You are a helpful assistant for Villa 8 at Amanyara Resort. Here is recent financial data:
+
+STATEMENTS: ${JSON.stringify(statements.rows)}
+EXPENSES: ${JSON.stringify(expenses.rows)}
+
+Answer questions about the villa's finances, expenses, occupancy, and revenue.`;
+
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: message }]
+      messages: [
+        { role: 'user', content: context + '\n\nUser question: ' + message }
+      ]
     });
     
     const assistantMessage = response.content[0].text;
@@ -809,7 +657,7 @@ app.post('/api/chat', requireAuth, async (req, res) => {
     res.json({ response: assistantMessage });
   } catch (err) {
     console.error('Chat error:', err);
-    res.status(500).json({ error: 'Failed to process chat message' });
+    res.status(500).json({ error: 'Chat failed' });
   }
 });
 
@@ -820,16 +668,10 @@ app.get('/api/chat/history', requireAuth, async (req, res) => {
       'SELECT role, content, created_at FROM chat_messages WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50',
       [req.session.userId]
     );
-    res.json(result.rows.reverse());
+    res.json({ messages: result.rows.reverse() });
   } catch (err) {
-    console.error('Chat history error:', err);
     res.status(500).json({ error: 'Failed to fetch chat history' });
   }
-});
-
-// Serve index.html for all other routes
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Start server
