@@ -1,8 +1,6 @@
 require('dotenv').config();
 const express = require('express');
 const multer = require('multer');
-const session = require('express-session');
-const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
 const pdfParse = require('pdf-parse');
 const path = require('path');
@@ -38,17 +36,6 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.set('trust proxy', 1);
 
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'villa-dashboard-secret-key-change-in-production',
-  resave: false,
-  saveUninitialized: false,
-  cookie: { 
-    secure: process.env.NODE_ENV === 'production',
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: 24 * 60 * 60 * 1000
-  }
-}));
 
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
@@ -62,11 +49,6 @@ async function initDatabase() {
   const client = await pool.connect();
   try {
     await client.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(50) UNIQUE NOT NULL,
-        password_hash VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
       
       CREATE TABLE IF NOT EXISTS monthly_statements (
@@ -161,28 +143,12 @@ async function initDatabase() {
       );
     `);
     
-    const defaultPassword = process.env.DEFAULT_PASSWORD || 'villa2025';
-    const hashedPassword = await bcrypt.hash(defaultPassword, 10);
-    
-    await client.query(`
-      INSERT INTO users (username, password_hash) 
-      VALUES ('admin', $1) 
-      ON CONFLICT (username) DO NOTHING
-    `, [hashedPassword]);
-    
     console.log('Database initialized');
   } finally {
     client.release();
   }
 }
 
-// Auth middleware
-function requireAuth(req, res, next) {
-  if (req.session && req.session.userId) {
-    next();
-  } else {
-    res.status(401).json({ error: 'Unauthorized' });
-  }
 }
 
 // Helper function to clean numbers from PDF
@@ -357,64 +323,12 @@ async function parseHotelFolio(buffer, filename) {
 
 // API Routes
 
-// Login
-app.post('/api/login', async (req, res) => {
-  const { username, password } = req.body;
-  try {
-    const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
-    if (result.rows.length === 0) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-    const user = result.rows[0];
-    const validPassword = await bcrypt.compare(password, user.password_hash);
-    if (!validPassword) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-    req.session.userId = user.id;
-    req.session.username = user.username;
-    res.json({ success: true, username: user.username });
-  } catch (err) {
-    console.error('Login error:', err);
-    res.status(500).json({ error: 'Login failed' });
-  }
-});
 
-// Logout
-app.post('/api/logout', (req, res) => {
-  req.session.destroy();
-  res.json({ success: true });
-});
 
-// Check auth status
-app.get('/api/auth/status', (req, res) => {
-  if (req.session && req.session.userId) {
-    res.json({ authenticated: true, username: req.session.username });
-  } else {
-    res.json({ authenticated: false });
-  }
-});
 
-// Change password
-app.post('/api/change-password', requireAuth, async (req, res) => {
-  const { currentPassword, newPassword } = req.body;
-  try {
-    const result = await pool.query('SELECT * FROM users WHERE id = $1', [req.session.userId]);
-    const user = result.rows[0];
-    const validPassword = await bcrypt.compare(currentPassword, user.password_hash);
-    if (!validPassword) {
-      return res.status(401).json({ error: 'Current password is incorrect' });
-    }
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hashedPassword, req.session.userId]);
-    res.json({ success: true });
-  } catch (err) {
-    console.error('Password change error:', err);
-    res.status(500).json({ error: 'Failed to change password' });
-  }
-});
 
 // Upload and process PDF
-app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => {
+app.post('/api/upload', upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
@@ -527,7 +441,7 @@ app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => 
 });
 
 // Get dashboard data
-app.get('/api/dashboard', requireAuth, async (req, res) => {
+app.get('/api/dashboard', async (req, res) => {
   try {
     const statements = await pool.query('SELECT * FROM monthly_statements ORDER BY year DESC, month DESC');
     
@@ -583,7 +497,7 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
 });
 
 // Get data for a specific statement
-app.get('/api/statement/:id', requireAuth, async (req, res) => {
+app.get('/api/statement/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -621,7 +535,7 @@ app.get('/api/statement/:id', requireAuth, async (req, res) => {
 });
 
 // Chat with AI - FULL DATABASE ACCESS
-app.post('/api/chat', requireAuth, async (req, res) => {
+app.post('/api/chat', async (req, res) => {
   const { message } = req.body;
   
   if (!anthropic) {
@@ -632,7 +546,7 @@ app.post('/api/chat', requireAuth, async (req, res) => {
     // Save user message
     await pool.query(
       'INSERT INTO chat_messages (user_id, role, content) VALUES ($1, $2, $3)',
-      [req.session.userId, 'user', message]
+      [1, 'user', message]
     );
     
     // Fetch ALL data from database for comprehensive context
@@ -802,7 +716,7 @@ INSTRUCTIONS:
     // Save assistant response
     await pool.query(
       'INSERT INTO chat_messages (user_id, role, content) VALUES ($1, $2, $3)',
-      [req.session.userId, 'assistant', assistantMessage]
+      [1, 'assistant', assistantMessage]
     );
     
     res.json({ response: assistantMessage });
@@ -813,11 +727,11 @@ INSTRUCTIONS:
 });
 
 // Get chat history
-app.get('/api/chat/history', requireAuth, async (req, res) => {
+app.get('/api/chat/history', async (req, res) => {
   try {
     const result = await pool.query(
       'SELECT role, content, created_at FROM chat_messages WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50',
-      [req.session.userId]
+      [1]
     );
     res.json({ messages: result.rows.reverse() });
   } catch (err) {
