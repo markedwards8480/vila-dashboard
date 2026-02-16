@@ -11,6 +11,17 @@ const Anthropic = require('@anthropic-ai/sdk');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Origin protection — reject requests that bypass Cloudflare
+const ORIGIN_SECRET = process.env.ORIGIN_SECRET;
+if (ORIGIN_SECRET) {
+    app.use((req, res, next) => {
+          if (req.headers['x-origin-secret'] === ORIGIN_SECRET) {
+                  return next();
+          }
+          res.status(403).json({ error: 'Direct access not allowed' });
+    });
+}
+
 // Database connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
