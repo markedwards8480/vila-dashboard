@@ -150,8 +150,6 @@ async function initDatabase() {
   }
 }
 
-}
-
 // Helper function to clean numbers from PDF
 function cleanNumber(str) {
   if (!str) return 0;
