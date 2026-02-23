@@ -747,54 +747,74 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
   }
 });
 
+// Get all statements for month selector
+app.get('/api/statements', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT id, year, month, total_expenses, owner_nights, guest_nights, rental_nights, vacant_nights, rental_revenue, owner_revenue_share FROM monthly_statements ORDER BY year DESC, month DESC');
+    const statements = result.rows;
+    const availableYears = [...new Set(statements.map(s => s.year))].sort((a, b) => b - a);
+    res.json({ statements, availableYears });
+  } catch (err) {
+    console.error('Statements fetch error:', err);
+    res.status(500).json({ error: 'Failed to fetch statements' });
+  }
+});
+
 // Get dashboard data
 app.get('/api/dashboard', async (req, res) => {
   try {
-    const statements = await pool.query('SELECT * FROM monthly_statements ORDER BY year DESC, month DESC');
+    const ids = req.query.ids ? req.query.ids.split(',').map(Number).filter(n => !isNaN(n)) : null;
     
-    let expenses = [];
-    let utilities = [];
-    if (statements.rows.length > 0) {
-      const latestId = statements.rows[0].id;
-      const expenseResult = await pool.query(
-        'SELECT category, subcategory, SUM(amount) as total FROM expense_categories WHERE statement_id = $1 GROUP BY category, subcategory ORDER BY total DESC',
-        [latestId]
-      );
-      expenses = expenseResult.rows;
-      const utilityResult = await pool.query('SELECT * FROM utility_readings WHERE statement_id = $1', [latestId]);
-      utilities = utilityResult.rows;
+    let statements;
+    if (ids && ids.length > 0) {
+      statements = await pool.query('SELECT * FROM monthly_statements WHERE id = ANY($1) ORDER BY year DESC, month DESC', [ids]);
+    } else {
+      statements = await pool.query('SELECT * FROM monthly_statements ORDER BY year DESC, month DESC');
     }
     
-    const currentYear = new Date().getFullYear();
-    const ytdResult = await pool.query(`
-      SELECT 
-        SUM(closing_balance) as total_balance,
-        SUM(owner_nights) as total_owner_nights,
-        SUM(guest_nights) as total_guest_nights,
-        SUM(rental_nights) as total_rental_nights,
-        SUM(vacant_nights) as total_vacant_nights,
-        SUM(rental_revenue) as total_rental_revenue,
-        SUM(owner_revenue_share) as total_owner_revenue
-      FROM monthly_statements WHERE year = $1
-    `, [currentYear]);
+    const rows = statements.rows;
     
-    const trendResult = await pool.query(`
-      SELECT ms.year, ms.month, SUM(ec.amount) as total_expenses
-      FROM monthly_statements ms
-      LEFT JOIN expense_categories ec ON ms.id = ec.statement_id
-      WHERE ms.year >= $1 - 1
-      GROUP BY ms.year, ms.month
-      ORDER BY ms.year, ms.month
-    `, [currentYear]);
+    // Calculate totals from selected statements
+    let totalOwnerNights = 0, totalGuestNights = 0, totalRentalNights = 0, totalVacantNights = 0;
+    let totalRevenue = 0, totalExpenses = 0;
+    
+    for (const s of rows) {
+      totalOwnerNights += parseInt(s.owner_nights) || 0;
+      totalGuestNights += parseInt(s.guest_nights) || 0;
+      totalRentalNights += parseInt(s.rental_nights) || 0;
+      totalVacantNights += parseInt(s.vacant_nights) || 0;
+      totalRevenue += parseFloat(s.owner_revenue_share) || 0;
+      totalExpenses += parseFloat(s.total_expenses) || parseFloat(s.closing_balance) || 0;
+    }
+    
+    // Get expenses for selected statements
+    let expenses = [];
+    let utilities = [];
+    if (rows.length > 0) {
+      const stmtIds = rows.map(r => r.id);
+      const expenseResult = await pool.query(
+        'SELECT category, subcategory, SUM(amount) as total FROM expense_categories WHERE statement_id = ANY($1) GROUP BY category, subcategory ORDER BY total DESC',
+        [stmtIds]
+      );
+      expenses = expenseResult.rows;
+      const utilityResult = await pool.query('SELECT * FROM utility_readings WHERE statement_id = ANY($1)', [stmtIds]);
+      utilities = utilityResult.rows;
+    }
     
     const filesResult = await pool.query('SELECT * FROM uploaded_files ORDER BY upload_date DESC LIMIT 20');
     
     res.json({
-      statements: statements.rows,
+      statements: rows,
+      totals: {
+        totalOwnerNights,
+        totalGuestNights,
+        totalRentalNights,
+        totalVacantNights,
+        totalRevenue,
+        totalExpenses
+      },
       latestExpenses: expenses,
       latestUtilities: utilities,
-      ytdSummary: ytdResult.rows[0],
-      expenseTrends: trendResult.rows,
       recentFiles: filesResult.rows
     });
   } catch (err) {
