@@ -522,7 +522,32 @@ async function parseHotelFolio(buffer, filename) {
 
 
 
-// Upload and process PDF
+// Auth endpoints - Cloudflare Access handles real auth, these are for the frontend login screen
+app.get('/api/auth/status', (req, res) => {
+  // Check if user has a session cookie or just auto-authenticate behind Cloudflare
+  const cfUser = req.headers['cf-access-authenticated-user-email'];
+  if (cfUser) {
+    return res.json({ authenticated: true, username: cfUser.split('@')[0] });
+  }
+  // If no Cloudflare header, check simple session
+  if (req.headers.cookie && req.headers.cookie.includes('villa_auth=true')) {
+    return res.json({ authenticated: true, username: 'Admin' });
+  }
+  res.json({ authenticated: false });
+});
+
+app.post('/api/login', (req, res) => {
+  // No login required - Cloudflare Access handles authentication
+  res.setHeader('Set-Cookie', 'villa_auth=true; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400');
+  return res.json({ success: true, username: 'Admin' });
+});
+
+app.post('/api/logout', (req, res) => {
+  res.setHeader('Set-Cookie', 'villa_auth=true; Path=/; HttpOnly; Max-Age=0');
+  res.json({ success: true });
+});
+
+// Upload and process PDF/Excel
 app.post('/api/upload', upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
