@@ -793,7 +793,7 @@ app.get('/api/dashboard', async (req, res) => {
     if (rows.length > 0) {
       const stmtIds = rows.map(r => r.id);
       const expenseResult = await pool.query(
-        'SELECT category, subcategory, SUM(amount) as total FROM expense_categories WHERE statement_id = ANY($1) GROUP BY category, subcategory ORDER BY total DESC',
+        'SELECT category, subcategory, CAST(SUM(amount) AS FLOAT) as total FROM expense_categories WHERE statement_id = ANY($1) GROUP BY category, subcategory ORDER BY total DESC',
         [stmtIds]
       );
       expenses = expenseResult.rows;
@@ -813,6 +813,7 @@ app.get('/api/dashboard', async (req, res) => {
         totalRevenue,
         totalExpenses
       },
+      expensesByCategory: expenses,
       latestExpenses: expenses,
       latestUtilities: utilities,
       recentFiles: filesResult.rows
