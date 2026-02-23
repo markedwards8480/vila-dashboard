@@ -788,7 +788,8 @@ app.get('/api/dashboard', async (req, res) => {
     }
     
     // Get expenses for selected statements
-    let expenses = [];
+    let expensesByCategory = [];
+    let paretoAnalysis = [];
     let utilities = [];
     if (rows.length > 0) {
       const stmtIds = rows.map(r => r.id);
@@ -796,7 +797,44 @@ app.get('/api/dashboard', async (req, res) => {
         'SELECT category, subcategory, CAST(SUM(amount) AS FLOAT) as total FROM expense_categories WHERE statement_id = ANY($1) GROUP BY category, subcategory ORDER BY total DESC',
         [stmtIds]
       );
-      expenses = expenseResult.rows;
+      const flatExpenses = expenseResult.rows;
+      
+      // Calculate grand total
+      const grandTotal = flatExpenses.reduce((s, e) => s + e.total, 0);
+      
+      // Group by category
+      const catMap = {};
+      for (const e of flatExpenses) {
+        if (!catMap[e.category]) catMap[e.category] = { category: e.category, total: 0, items: [] };
+        catMap[e.category].total += e.total;
+        catMap[e.category].items.push({
+          subcategory: e.subcategory,
+          total: e.total,
+          pctOfTotal: grandTotal > 0 ? (e.total / grandTotal * 100) : 0
+        });
+      }
+      
+      // Sort categories by total descending
+      expensesByCategory = Object.values(catMap).sort((a, b) => b.total - a.total);
+      expensesByCategory.forEach(c => {
+        c.pctOfTotal = grandTotal > 0 ? (c.total / grandTotal * 100) : 0;
+        c.items.sort((a, b) => b.total - a.total);
+      });
+      
+      // Build pareto analysis (all subcategories sorted by total, with cumulative %)
+      const sortedItems = [...flatExpenses].sort((a, b) => b.total - a.total);
+      let cumulative = 0;
+      paretoAnalysis = sortedItems.map(e => {
+        cumulative += e.total;
+        return {
+          name: e.subcategory,
+          category: e.category,
+          total: e.total,
+          pctOfTotal: grandTotal > 0 ? (e.total / grandTotal * 100) : 0,
+          cumulativePct: grandTotal > 0 ? (cumulative / grandTotal * 100) : 0
+        };
+      });
+      
       const utilityResult = await pool.query('SELECT * FROM utility_readings WHERE statement_id = ANY($1)', [stmtIds]);
       utilities = utilityResult.rows;
     }
@@ -813,8 +851,8 @@ app.get('/api/dashboard', async (req, res) => {
         totalRevenue,
         totalExpenses
       },
-      expensesByCategory: expenses,
-      latestExpenses: expenses,
+      expensesByCategory,
+      paretoAnalysis,
       latestUtilities: utilities,
       recentFiles: filesResult.rows
     });
