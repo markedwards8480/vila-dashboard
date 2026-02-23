@@ -3,6 +3,7 @@ const express = require('express');
 const multer = require('multer');
 const { Pool } = require('pg');
 const pdfParse = require('pdf-parse');
+const XLSX = require('xlsx');
 const path = require('path');
 const Anthropic = require('@anthropic-ai/sdk');
 
@@ -171,6 +172,204 @@ function parseOccDate(dateStr, year) {
     return new Date(yr, month, day);
   }
   return null;
+}
+
+// Parse monthly statement from Excel (.xlsx/.xls)
+function parseExcelStatement(buffer, filename) {
+  const wb = XLSX.read(buffer, { type: 'buffer' });
+  const monthNames = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+
+  // --- Determine which month(s) this file covers ---
+  // Try filename first: "villa_08_Statement_January_2026.xlsx"
+  let fileYear = null, fileMonth = null;
+  const fnMatch = filename.match(/(?:statement|stmt)[_\s\-]*(\w+)[_\s\-]*(\d{4})/i);
+  if (fnMatch) {
+    const mi = monthNames.findIndex(m => m.startsWith(fnMatch[1].toLowerCase()));
+    if (mi !== -1) { fileMonth = mi + 1; fileYear = parseInt(fnMatch[2]); }
+  }
+
+  // --- Read Summary sheet ---
+  const summarySheet = wb.Sheets[wb.SheetNames.find(n => n.trim().toLowerCase().startsWith('summary')) || wb.SheetNames[0]];
+  const summaryData = XLSX.utils.sheet_to_json(summarySheet, { header: 1, defval: '' });
+
+  // Try to get year from the Summary header row (e.g. "January 31st , 2026")
+  if (!fileYear) {
+    for (let i = 0; i < Math.min(5, summaryData.length); i++) {
+      const row = summaryData[i];
+      for (const cell of row) {
+        const ym = String(cell).match(/(\d{4})/);
+        if (ym) { fileYear = parseInt(ym[1]); break; }
+      }
+      if (fileYear) break;
+    }
+  }
+  if (!fileYear) fileYear = new Date().getFullYear();
+
+  // --- Map the Summary sheet layout ---
+  // Row indices (0-based from summaryData):
+  // Row 3: occupancy header with "# Nights" columns
+  // Row 4: Villa Owner Usage         - col E (idx 4) = current month, col I (idx 8) = YTD, col J+ = monthly
+  // Row 5: Villa Owner Guest Usage
+  // Row 7: Villa Rental
+  // Row 8: Vacant
+  // Row 10: RENTAL REVENUE header - col J-U have serial dates for Jan-Dec
+  // Row 12: Gross Villa Revenue
+  // Row 18: NET VILLA REVENUE
+  // Row 20: 50% OWNER REVENUE
+  // Row 67: TOTAL EXPENSES
+  
+  // Detect monthly columns (J=9 through U=20) - these have Excel serial dates in Row 10
+  // Each column with data > 0 in the expense row represents a month with data
+  const monthlyColStart = 9; // Column J = index 9
+  
+  // Helper to safely get numeric value
+  const num = (row, col) => {
+    if (!row || col >= row.length) return 0;
+    const v = row[col];
+    if (v === '' || v === null || v === undefined) return 0;
+    return parseFloat(v) || 0;
+  };
+
+  // Find key rows by label
+  let ownerUsageRow, guestUsageRow, rentalRow, vacantRow, oooRow;
+  let grossRevenueRow, netRevenueRow, ownerRevenueRow, totalExpensesRow;
+  let expenseRows = [];
+  
+  for (let i = 0; i < summaryData.length; i++) {
+    const label = String(summaryData[i][0] || '').trim().toLowerCase() + ' ' + String(summaryData[i][2] || '').trim().toLowerCase();
+    if (label.includes('villa owner usage') || label.includes('owner usage')) ownerUsageRow = i;
+    else if (label.includes('villa owner guest') || label.includes('owner guest')) guestUsageRow = i;
+    else if (label.includes('villa rental') && !label.includes('credit') && !label.includes('revenue')) rentalRow = i;
+    else if (label.includes('vacant')) vacantRow = i;
+    else if (label.includes('ooo')) oooRow = i;
+    else if (label.includes('gross villa revenue')) grossRevenueRow = i;
+    else if (label.includes('net villa revenue')) netRevenueRow = i;
+    else if (label.includes('50% owner revenue') || label.includes('owner revenue')) ownerRevenueRow = i;
+    else if (label.includes('total expenses') && !label.includes('excluding')) totalExpensesRow = i;
+  }
+
+  // Collect all months that have data
+  const results = [];
+  
+  for (let m = 0; m < 12; m++) {
+    const col = monthlyColStart + m; // J=9 for Jan, K=10 for Feb, etc.
+    
+    // Check if this month has any data - look at total expenses column
+    const totalExp = totalExpensesRow ? num(summaryData[totalExpensesRow], col) : 0;
+    const ownerN = ownerUsageRow ? num(summaryData[ownerUsageRow], col) : 0;
+    const guestN = guestUsageRow ? num(summaryData[guestUsageRow], col) : 0;
+    const vacantN = vacantRow ? num(summaryData[vacantRow], col) : 0;
+    const rentalN = rentalRow ? num(summaryData[rentalRow], col) : 0;
+    
+    // Skip months with no data at all
+    if (totalExp === 0 && ownerN === 0 && guestN === 0 && vacantN === 0 && rentalN === 0) continue;
+    
+    const month = m + 1;
+    const grossRev = grossRevenueRow ? num(summaryData[grossRevenueRow], col) : 0;
+    const netRev = netRevenueRow ? num(summaryData[netRevenueRow], col) : 0;
+    const ownerRev = ownerRevenueRow ? num(summaryData[ownerRevenueRow], col) : 0;
+    
+    // Parse expense categories from the Summary sheet
+    const expenses = [];
+    // Direct Expenses - General Services (rows ~24-36)
+    const expenseMap = [
+      { search: 'payroll & related expenses - admin', cat: 'Shared Villa Expenses', sub: 'Admin & Shared Staff Payroll' },
+      { search: 'payroll & related expenses', cat: 'General Services', sub: 'Payroll & Related Expenses' },
+      { search: 'guest amenities', cat: 'General Services', sub: 'Guest Amenities' },
+      { search: 'cleaning supplies', cat: 'General Services', sub: 'Cleaning Supplies' },
+      { search: 'laundry', cat: 'General Services', sub: 'Laundry' },
+      { search: 'miscellaneous', cat: 'General Services', sub: 'Miscellaneous' },
+      { search: 'other operating supplies', cat: 'General Services', sub: 'Other Operating Supplies' },
+      { search: 'uniform', cat: 'General Services', sub: 'Uniform' },
+      { search: 'telephone', cat: 'General Services', sub: 'Telephone/Cable TV/Internet' },
+      { search: 'printing', cat: 'General Services', sub: 'Printing & Stationery' },
+      { search: 'linens', cat: 'General Services', sub: 'Linens' },
+      { search: 'professional services', cat: 'General Services', sub: 'Professional Services' },
+      { search: 'liability insurance', cat: 'General Services', sub: 'Liability Insurance' },
+      { search: 'materials - maintenance', cat: 'Maintenance', sub: 'Materials - Maintenance' },
+      { search: 'materials - landscap', cat: 'Maintenance', sub: 'Materials - Landscaping' },
+      { search: 'contract services', cat: 'Maintenance', sub: 'Contract Services' },
+      { search: 'fuel', cat: 'Maintenance', sub: 'Fuel' },
+      { search: 'payroll & related expenses - admin', cat: 'Shared Villa Expenses', sub: 'Admin & Shared Staff Payroll' },
+      { search: 'maintenance program', cat: 'Shared Villa Expenses', sub: 'Maintenance Program' },
+      { search: 'maintenance     materials', cat: 'Shared Villa Expenses', sub: 'Maintenance Materials' },
+      { search: 'landscaping program', cat: 'Shared Villa Expenses', sub: 'Landscaping Program' },
+      { search: 'pest control', cat: 'Shared Villa Expenses', sub: 'Pest Control & Waste Removal' },
+      { search: 'security program', cat: 'Shared Villa Expenses', sub: 'Security Program' },
+      { search: '15% administration', cat: 'Administration', sub: '15% Administration Fee' },
+      { search: 'electricity', cat: 'Utilities', sub: 'Electricity' },
+      { search: 'water', cat: 'Utilities', sub: 'Water' },
+    ];
+    
+    for (let i = 0; i < summaryData.length; i++) {
+      const cellLabel = String(summaryData[i][0] || '').trim().toLowerCase();
+      for (const em of expenseMap) {
+        if (cellLabel.includes(em.search)) {
+          const amt = num(summaryData[i], col);
+          if (amt > 0) {
+            expenses.push({ category: em.cat, subcategory: em.sub, amount: amt });
+          }
+          break;
+        }
+      }
+    }
+    
+    // Parse utilities from Utility sheet
+    const utilities = [];
+    const utilSheet = wb.Sheets[wb.SheetNames.find(n => n.trim().toLowerCase().startsWith('util'))];
+    if (utilSheet) {
+      const utilData = XLSX.utils.sheet_to_json(utilSheet, { header: 1, defval: '' });
+      for (let i = 0; i < utilData.length; i++) {
+        const label = String(utilData[i][0] || '').trim().toLowerCase();
+        if (label.includes('total energy cost')) {
+          utilities.push({ type: 'Electricity', consumption: num(utilData[i-4] || [], 1), cost: num(utilData[i], 2), unit: 'kWh' });
+        } else if (label.includes('total water consumption')) {
+          utilities.push({ type: 'Water', consumption: num(utilData[i-3] || [], 2), cost: num(utilData[i], 2), unit: 'gallons' });
+        }
+      }
+    }
+
+    // Parse occupancy details from Rental sheet
+    const occupancyDetails = [];
+    const rentalSheet = wb.Sheets[wb.SheetNames.find(n => n.trim().toLowerCase().startsWith('rental'))];
+    if (rentalSheet) {
+      const rentalData = XLSX.utils.sheet_to_json(rentalSheet, { header: 1, defval: '' });
+      for (let i = 0; i < rentalData.length; i++) {
+        const activity = String(rentalData[i][0] || '').trim();
+        const type = String(rentalData[i][1] || '').trim();
+        const nights = parseInt(rentalData[i][4]) || 0;
+        if (nights > 0 && type && ['VO','VOG','VR','VA','OOO','COMP'].includes(type)) {
+          const typeMap = { 'VO': 'Owner', 'VOG': 'Guest', 'VR': 'Rental', 'VA': 'Vacant', 'OOO': 'OOO', 'COMP': 'Complimentary' };
+          occupancyDetails.push({
+            type: typeMap[type] || type,
+            checkIn: rentalData[i][2] ? XLSX.SSF.format('dd-MMM-yy', rentalData[i][2]) : null,
+            checkOut: rentalData[i][3] ? XLSX.SSF.format('dd-MMM-yy', rentalData[i][3]) : null,
+            nights
+          });
+        }
+      }
+    }
+    
+    results.push({
+      year: fileYear,
+      month,
+      statementDate: new Date(fileYear, month - 1, 1),
+      closingBalance: totalExp, // total expenses for the month
+      ownerNights: ownerN,
+      guestNights: guestN,
+      rentalNights: rentalN,
+      vacantNights: vacantN,
+      rentalRevenue: grossRev,
+      ownerRevenueShare: ownerRev,
+      expenses,
+      utilities: month === (results.length === 0 ? month : 0) ? utilities : [], // only attach utilities to first month
+      occupancyDetails: month === (results.length === 0 ? month : 0) ? occupancyDetails : [],
+      rawText: `Excel import: ${filename} - Month ${month}/${fileYear}`,
+      totalExpenses: totalExp
+    });
+  }
+  
+  return results;
 }
 
 // Parse monthly statement PDF
@@ -344,8 +543,95 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     const uploadId = uploadResult.rows[0].id;
     
     let parseResult;
+    const ext = originalname.split('.').pop().toLowerCase();
+    const isExcel = ['xlsx', 'xls', 'xlsm'].includes(ext);
     
-    if (fileType === 'statement') {
+    if (fileType === 'statement' && isExcel) {
+      // Excel statement - may contain multiple months
+      const monthResults = parseExcelStatement(buffer, originalname);
+      
+      if (monthResults.length === 0) {
+        return res.json({ success: true, parsed: { warning: 'No monthly data found in Excel file' } });
+      }
+      
+      let totalMonths = 0;
+      for (const mr of monthResults) {
+        const statementResult = await pool.query(`
+          INSERT INTO monthly_statements 
+          (statement_date, year, month, closing_balance, owner_nights, guest_nights, 
+           rental_nights, vacant_nights, rental_revenue, owner_revenue_share, raw_data)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          ON CONFLICT (year, month) DO UPDATE SET
+            closing_balance = EXCLUDED.closing_balance,
+            owner_nights = EXCLUDED.owner_nights,
+            guest_nights = EXCLUDED.guest_nights,
+            rental_nights = EXCLUDED.rental_nights,
+            vacant_nights = EXCLUDED.vacant_nights,
+            rental_revenue = EXCLUDED.rental_revenue,
+            owner_revenue_share = EXCLUDED.owner_revenue_share,
+            raw_data = EXCLUDED.raw_data
+          RETURNING id
+        `, [
+          mr.statementDate, mr.year, mr.month, mr.closingBalance,
+          mr.ownerNights, mr.guestNights, mr.rentalNights, mr.vacantNights,
+          mr.rentalRevenue, mr.ownerRevenueShare,
+          { text: mr.rawText, expenses: mr.expenses, utilities: mr.utilities }
+        ]);
+        
+        const statementId = statementResult.rows[0].id;
+        
+        // Insert expenses
+        await pool.query('DELETE FROM expense_categories WHERE statement_id = $1', [statementId]);
+        for (const expense of mr.expenses) {
+          await pool.query(
+            'INSERT INTO expense_categories (statement_id, category, subcategory, amount) VALUES ($1, $2, $3, $4)',
+            [statementId, expense.category, expense.subcategory, expense.amount]
+          );
+        }
+        
+        // Insert utilities
+        if (mr.utilities.length > 0) {
+          await pool.query('DELETE FROM utility_readings WHERE statement_id = $1', [statementId]);
+          for (const utility of mr.utilities) {
+            await pool.query(
+              'INSERT INTO utility_readings (statement_id, utility_type, consumption, cost, unit) VALUES ($1, $2, $3, $4, $5)',
+              [statementId, utility.type, utility.consumption, utility.cost, utility.unit]
+            );
+          }
+        }
+        
+        // Insert occupancy details
+        if (mr.occupancyDetails.length > 0) {
+          await pool.query('DELETE FROM occupancy_details WHERE statement_id = $1', [statementId]);
+          for (const occ of mr.occupancyDetails) {
+            await pool.query(
+              'INSERT INTO occupancy_details (statement_id, activity_type, check_in, check_out, num_nights, owner_nights, guest_nights, rental_nights, vacant_nights) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+              [
+                statementId, occ.type,
+                parseOccDate(occ.checkIn, mr.year),
+                parseOccDate(occ.checkOut, mr.year),
+                occ.nights,
+                occ.type === 'Owner' ? occ.nights : 0,
+                occ.type === 'Guest' ? occ.nights : 0,
+                occ.type === 'Rental' ? occ.nights : 0,
+                occ.type === 'Vacant' ? occ.nights : 0
+              ]
+            );
+          }
+        }
+        
+        totalMonths++;
+      }
+      
+      parseResult = {
+        source: 'excel',
+        monthsProcessed: totalMonths,
+        year: monthResults[0].year,
+        months: monthResults.map(r => ({ month: r.month, totalExpenses: r.totalExpenses, ownerNights: r.ownerNights, guestNights: r.guestNights })),
+        message: `Successfully imported ${totalMonths} month(s) of data for ${monthResults[0].year}`
+      };
+      
+    } else if (fileType === 'statement') {
       parseResult = await parseMonthlyStatement(buffer, originalname);
       
       if (parseResult.year && parseResult.month) {
