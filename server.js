@@ -50,8 +50,6 @@ async function initDatabase() {
   const client = await pool.connect();
   try {
     await client.query(`
-      );
-      
       CREATE TABLE IF NOT EXISTS monthly_statements (
         id SERIAL PRIMARY KEY,
         statement_date DATE,
